@@ -1,0 +1,94 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "landing/**"
+      - "web/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.1
+          cache: true
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6.0.0
+
+      - name: Set static base path
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          if [[ "$repo_name" == *.github.io ]]; then
+            base_path=""
+          else
+            base_path="/$repo_name"
+          fi
+          echo "NEXT_PUBLIC_BASE_PATH=$base_path" >> "$GITHUB_ENV"
+          echo "FLUTTER_WEB_BASE_HREF=$base_path/demo/" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_REPOSITORY_URL=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" >> "$GITHUB_ENV"
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Flutter web demo
+        run: flutter build web --release --base-href "$FLUTTER_WEB_BASE_HREF"
+
+      - name: Install dependencies
+        working-directory: landing
+        run: npm ci
+
+      - name: Build landing page
+        working-directory: landing
+        run: npm run build
+
+      - name: Mount Flutter demo under landing /demo
+        run: |
+          mkdir -p landing/out/demo
+          cp -a build/web/. landing/out/demo/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: landing/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5.0.0
