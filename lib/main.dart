@@ -37,9 +37,17 @@ class YptApp extends StatefulWidget {
 }
 
 class _YptAppState extends State<YptApp> {
-  /// 供 dispose 时对称移除监听。ChangeNotifier 不持有监听者，
-  /// 若不移除，AppState 会一直回调已销毁的托盘。
+  /// 持有的 AppState，用于 dispose 时对称移除监听。
+  /// ChangeNotifier 自身不持有监听者，不去重会留下悬空回调。
+  AppState? _app;
+
+  /// 托盘的两条回调。保留引用是因为 removeListener / 取消订阅需要同一个
+  /// 函数对象——写成 `tray.sync` 两次会得到两个不同的闭包，摘不掉。
   VoidCallback? _traySync;
+  VoidCallback? _trayTick;
+
+  /// addTickListener 返回的取消函数。
+  VoidCallback? _cancelTrayTick;
 
   @override
   void initState() {
@@ -49,6 +57,7 @@ class _YptAppState extends State<YptApp> {
       if (!mounted) return;
       final app = context.read<AppState>();
       if (_tray != null) return;
+      _app = app;
       final tray = TrayService(app);
       _tray = tray;
       await tray.init();
@@ -58,16 +67,28 @@ class _YptAppState extends State<YptApp> {
         _tray = null;
         return;
       }
-      // AppState 每次 notify 都同步托盘菜单（状态行、开始/停止项、空档入口）。
+      // 两条通道，职责不同：
+      //   sync     —— AppState 结构变化（开始/停止/切科目/加载完成）时重建菜单
+      //   tickSync —— 每秒只刷新状态行文字，避免重建整棵菜单
+      // 两者都要注册：计时数字的秒级通知已从 ChangeNotifier 拆到 tick 通道，
+      // 只挂 sync 会让托盘上的时间静止不动。
       _traySync = tray.sync;
+      _trayTick = tray.tickSync;
       app.addListener(_traySync!);
+      _cancelTrayTick = app.addTickListener(_trayTick!);
     });
   }
 
   @override
   void dispose() {
-    // AppState 由 Provider 创建，会自行 dispose；这里只清理托盘侧。
+    // AppState 由 Provider 创建、会自行 dispose；这里只做托盘侧的对称清理。
+    final sync = _traySync;
+    if (sync != null) _app?.removeListener(sync);
+    _cancelTrayTick?.call();
     _traySync = null;
+    _trayTick = null;
+    _cancelTrayTick = null;
+    _app = null;
     _tray?.dispose();
     _tray = null;
     super.dispose();
