@@ -93,17 +93,28 @@ if errorlevel 1 (
 echo   analyze passed, no errors.
 echo.
 
-REM ---------- 3. logic tests ----------
-echo [3/7] Logic self-tests (76 assertions)...
-copy /y tool\selftest.dart "%TEMP%\ypt_st.dart" >nul
-copy /y tool\calendartest.dart "%TEMP%\ypt_ct.dart" >nul
-"%DARTEXE%" run "%TEMP%\ypt_st.dart"
+REM ---------- 3. static check + logic tests ----------
+REM All three run in place from the project root.
+REM staticcheck MUST run here: it reads lib/ relatively, so copying it to
+REM %TEMP% would break it.
+echo [3/7] Static check + logic self-tests...
+
+echo   [3a] static check: duplicate members, unused imports
+"%DARTEXE%" run tool\staticcheck.dart
+if errorlevel 1 (
+    echo   [ERROR] static check failed. See the report above.
+    pause
+    exit /b 1
+)
+
+echo   [3b] logic self-tests, 76 assertions
+"%DARTEXE%" run tool\selftest.dart
 if errorlevel 1 (
     echo   [ERROR] selftest failed.
     pause
     exit /b 1
 )
-"%DARTEXE%" run "%TEMP%\ypt_ct.dart"
+"%DARTEXE%" run tool\calendartest.dart
 if errorlevel 1 (
     echo   [ERROR] calendartest failed.
     pause

@@ -321,12 +321,6 @@ class TrayService {
     await windowManager.destroy();
   }
 
-  /// AppState 变化时由外部调用，刷新菜单里的状态行。
-  void sync() {
-    if (!_ready) return;
-    _rebuildMenu();
-  }
-
   /// 窗口关闭被拦截时调用：隐藏到托盘。
   void onWindowCloseAttempt() {
     if (_quitting) return;
