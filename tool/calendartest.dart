@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // 日历解析器行为测试。
 //
 // 验证 lib/ypt_api.dart 里 YptApi.parseCalendarPoints / _parseLooseDate 的

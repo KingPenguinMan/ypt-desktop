@@ -49,7 +49,7 @@ class _GroupsViewState extends State<GroupsView> {
               padding: const EdgeInsets.all(24),
               child: Center(
                   child: Text('No groups found',
-                      style: TextStyle(color: Colors.grey[600]))),
+                      style: TextStyle(color: Color(0xFF757575)))),
             )
           else
             ...st.groups.map((g) => _GroupCard(group: g, joined: false)),
@@ -115,7 +115,7 @@ class _GroupCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style:
-                              TextStyle(color: Colors.grey[500], fontSize: 12)),
+                              TextStyle(color: Color(0xFF9E9E9E), fontSize: 12)),
                     ],
                   ),
                 ),
@@ -128,7 +128,7 @@ class _GroupCard extends StatelessWidget {
                   children: [
                     const Icon(Icons.person, size: 14, color: Colors.grey),
                     Text('${group.memberCount}',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                        style: TextStyle(color: Color(0xFFBDBDBD), fontSize: 12)),
                   ],
                 ),
                 const Icon(Icons.chevron_right, color: Colors.grey),

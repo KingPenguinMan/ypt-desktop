@@ -54,7 +54,12 @@ class CalendarHeatmap extends StatelessWidget {
               for (var w = 0; w < weeks; w++)
                 SizedBox(
                   width: cellSize + 3,
-                  child: _monthLabel(start.add(Duration(days: 7 * w))),
+                  // _monthLabel 返回的是文本，必须包成 Text 才能放进
+                  // SizedBox.child（后者要求 Widget）。
+                  child: Text(
+                    _monthLabel(start.add(Duration(days: 7 * w))),
+                    style: const TextStyle(fontSize: 10),
+                  ),
                 ),
             ],
           ),
@@ -77,7 +82,7 @@ class CalendarHeatmap extends StatelessWidget {
                           d % 2 == 1 ? _weekdayLabel(d) : '',
                           style: TextStyle(
                             fontSize: 9,
-                            color: Colors.grey[600],
+                            color: Color(0xFF757575),
                           ),
                         ),
                       ),
@@ -174,7 +179,7 @@ class _Legend extends StatelessWidget {
     return Row(
       children: [
         const Text('少',
-            style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+            style: TextStyle(fontSize: 10, color: Color(0xFF757575))),
         const SizedBox(width: 6),
         for (final c in HeatLevel.colors)
           Container(
@@ -188,7 +193,7 @@ class _Legend extends StatelessWidget {
           ),
         const SizedBox(width: 3),
         const Text('多',
-            style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+            style: TextStyle(fontSize: 10, color: Color(0xFF757575))),
         const Spacer(),
         // 显示有记录的天数，这是热力图最直接的总结论。
         Text(
@@ -260,7 +265,7 @@ class SelectedDayCard extends StatelessWidget {
           if (entries.isEmpty) ...[
             const SizedBox(height: 8),
             const Text('当天没有学习记录',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                style: TextStyle(fontSize: 12, color: Color(0xFF757575))),
           ] else ...[
             const SizedBox(height: 10),
             for (final e in entries.take(8))
@@ -287,7 +292,7 @@ class SelectedDayCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text('…另有 ${entries.length - 8} 个科目',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey[600])),
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF757575))),
               ),
           ],
         ],

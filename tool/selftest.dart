@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // 核心逻辑自检 —— 纯 Dart,不依赖 Flutter / shared_preferences。
 //
 // 为什么单独放一个文件:lib/ 下的存储类都import shared_preferences,

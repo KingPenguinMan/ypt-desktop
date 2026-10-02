@@ -119,7 +119,7 @@ class _YptAppState extends State<YptApp> {
         ),
       ),
       home: Consumer<AppState>(
-        builder: (_, st, __) =>
+        builder: (_, st, _) =>
             st.loggedIn ? const HomeScreen() : const LoginScreen(),
       ),
     );

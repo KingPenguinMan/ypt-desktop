@@ -57,6 +57,10 @@ class TrayService {
   Future<void> init() async {
     if (!isSupported || _ready) return;
     try {
+      // window_manager 没有 getOptions/setOptions——设置项是逐个方法
+      // （setSize / setMinimumSize / setTitle ...），窗口选项只在
+      // waitUntilReadyToShow 的参数里生效。所以最小尺寸用 setMinimumSize。
+      await windowManager.ensureInitialized();
       await windowManager.waitUntilReadyToShow(
         const WindowOptions(size: Size(440, 840), center: true),
         () async {
@@ -64,10 +68,8 @@ class TrayService {
           await windowManager.focus();
         },
       );
-      // 最小窗口，太小会让热力图挤坏。
-      final opt = await windowManager.getOptions();
-      opt.minimumSize = const Size(400, 620);
-      await windowManager.setOptions(opt);
+      // 太小会让日历热力图和扇形图挤坏。
+      await windowManager.setMinimumSize(const Size(400, 620));
       // 关闭按钮 = 隐藏到托盘，不是退出。
       await windowManager.setPreventClose(true);
       windowManager.addListener(_WindowEvents(this));
@@ -193,13 +195,19 @@ class TrayService {
   }
 
   void _bindMenu(MenuItem item, void Function() action) {
-    void Function(MenuEvent) listener = (event) {
+    // 这里用局部函数而非 `void Function(MenuEvent) listener = ...`：
+    // 声明为局部函数语义相同（都产生一个闭包），但避免了
+    // prefer_function_declarations_over_variables 这条 lint。
+    //
+    // 闭包必须被持有 —— 存在 _menuListeners 里，否则会被 GC，
+    // 表现为"点了菜单没反应"。
+    void listener(MenuEvent event) {
       if (event is MenuItemClickedEvent) {
         action();
       }
-    };
+    }
+
     item.addListener(listener);
-    // 保持引用，防止被 GC。
     _menuListeners.add(listener);
   }
 

@@ -92,7 +92,7 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
           children: [
             Text(
               '你停止了计时 $minutes 分钟，期间不在学习状态。',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              style: TextStyle(color: Color(0xFFBDBDBD), fontSize: 13),
             ),
             const SizedBox(height: 16),
             // 预设标签
@@ -138,7 +138,7 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
             if (context.mounted) Navigator.of(context).pop();
           },
           child: const Text('跳过',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
         ),
         // 记录：闭合本地 + 同步 /rest/record
         TextButton(
@@ -196,7 +196,7 @@ class _TagChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? kBrand : Colors.grey[400],
+              color: selected ? kBrand : Color(0xFFBDBDBD),
             ),
           ),
         ),

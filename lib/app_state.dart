@@ -502,7 +502,12 @@ class AppState extends ChangeNotifier {
   /// 用一个 future 链当互斥锁：后到的操作必须等前一个完成。
   Future<void> _timerLock = Future<void>.value();
 
-  T _serialize<T>(Future<T> Function() op) {
+  /// 把 [op] 排进计时操作队列，返回它完成后的结果。
+  ///
+  /// 用 future 链当互斥锁：后到的操作必须等前一个完成（无论前一个成功还是
+  /// 失败）。注意不能写成 `T _serialize(...)`——那样返回类型与
+  /// `completer.future` 冲突，编译器会报 return_of_invalid_type。
+  Future<T> _serialize<T>(Future<T> Function() op) {
     final completer = Completer<T>();
     _timerLock = _timerLock.then((_) async {
       try {
@@ -510,11 +515,14 @@ class AppState extends ChangeNotifier {
       } catch (e, st) {
         completer.completeError(e, st);
       }
+      // 链本身必须吞掉异常，否则一次失败会让后续所有操作都跳过。
+    }).catchError((Object _) {
+      // no-op：调用方的错误已通过 completer 传出。
     });
     return completer.future;
   }
 
-  Future<void> startTimer(Subject s) => _serialize(() => _startTimer(s));
+  Future<void> startTimer(Subject s) => _serialize<void>(() => _startTimer(s));
 
   Future<void> _startTimer(Subject s) async {
     if (timerLoading) return;
@@ -557,8 +565,15 @@ class AppState extends ChangeNotifier {
   }
 
   /// 用户点了停止。正常路径，会把空档记录挂起等下次开始时补录。
+  ///
+  /// 内部返回 bool（是否真的停掉了），但这里故意丢弃——调用方只看
+  /// 状态变化，不需要成功标志。要判断成功请用 [stopTimerAndReport]。
   Future<void> stopTimer({bool silent = false}) =>
-      _serialize(() => _stopTimerInternal(silent: silent));
+      _serialize<void>(() => _stopTimerInternal(silent: silent)).then((_) {});
+
+  /// 同 [stopTimer]，但返回是否真的停掉了。
+  Future<bool> stopTimerAndReport({bool silent = false}) =>
+      _serialize<bool>(() => _stopTimerInternal(silent: silent));
 
   /// 返回 true 表示确实停掉了（或本来就没在计时），false 表示失败。
   Future<bool> _stopTimerInternal({bool silent = false}) async {
@@ -749,7 +764,13 @@ class AppState extends ChangeNotifier {
       // 挂在 IndexedStack 下（都处于存活状态），每秒重建整棵子树是纯浪费。
       //
       // 全局通知改由状态真正变化时（开始/停止/切科目/加载完成）触发。
-      _tickListeners.forEach((l) => l());
+      //
+      // 用 for 循环而非 forEach：监听者可能在回调里取消订阅（dispose 时会），
+      // 迭代同一个 List 时会抛 ConcurrentModificationError。复制一份再遍历
+      // 同样安全，但 for 循环更省一次分配。
+      for (final l in List<VoidCallback>.of(_tickListeners)) {
+        l();
+      }
     });
   }
 

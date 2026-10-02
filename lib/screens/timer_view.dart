@@ -92,7 +92,7 @@ class TimerView extends StatelessWidget {
                           children: [
                             Text('No subjects loaded',
                                 style: TextStyle(
-                                    color: Colors.grey[600], fontSize: 13)),
+                                    color: Color(0xFF757575), fontSize: 13)),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
                               onPressed: () =>
@@ -113,7 +113,7 @@ class TimerView extends StatelessWidget {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: user.subjects.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (_, i) => _SubjectCard(subject: user.subjects[i]),
                 ),
         ),
@@ -243,7 +243,11 @@ class _SubjectCard extends StatelessWidget {
         // 官方客户端同样是停止即弹（i18n key
         // alert_stop_study_just_now_record），此时空档区间已确定。
         app.stopTimer().then((_) {
-          if (mounted) GapPromptDialog.maybeShow(context, app.pendingGap);
+          // await 之后不能再用 context，必须先检查 mounted。
+          // 这里用 context.mounted 而不是 mounted——_SubjectCard 是
+          // StatelessWidget，没有自己的 mounted 成员。
+          if (!context.mounted) return;
+          GapPromptDialog.maybeShow(context, app.pendingGap);
         });
       } else {
         app.startTimer(s);

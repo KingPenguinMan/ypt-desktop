@@ -25,6 +25,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.2"
+  cnativeapi:
+    dependency: transitive
+    description:
+      name: cnativeapi
+      sha256: "43fce94bdf2f60e15bb7b0ef7b78b60fc0758e5463817fa17c5fb59f149566dd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   collection:
     dependency: transitive
     description:
@@ -66,10 +74,10 @@ packages:
     dependency: "direct dev"
     description:
       name: flutter_lints
-      sha256: "3f41d009ba7172d5ff9be5f6e6e6abb4300e263aab8866d2a0842ed2a70f8f0c"
+      sha256: "3105dc8492f6183fb076ccf1f351ac3d60564bff92e20bfc4af9cc1651f4e7e1"
       url: "https://pub.dev"
     source: hosted
-    version: "4.0.0"
+    version: "6.0.0"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -99,14 +107,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.19.0"
+  json_annotation:
+    dependency: transitive
+    description:
+      name: json_annotation
+      sha256: "2a743920d81b7910627f68ee2c9ac1fc0bfee32b9fc3403587d7c6791ca12f80"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.12.0"
   lints:
     dependency: transitive
     description:
       name: lints
-      sha256: "976c774dd944a42e83e2467f4cc670daef7eed6295b10b36ae8c85bcbf828235"
+      sha256: "12f842a479589fea194fe5c5a3095abc7be0c1f2ddfa9a0e76aed1dbd26a87df"
       url: "https://pub.dev"
     source: hosted
-    version: "4.0.0"
+    version: "6.1.0"
   material_color_utilities:
     dependency: transitive
     description:
@@ -119,10 +135,18 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "1741988757a65eb6b36abe716829688cf01910bbf91c34354ff7ec1c3de2b349"
+      sha256: "307249ce4ff29d58a18e97f6345f539382eb9c9c29ecda628900f31de0443dd9"
       url: "https://pub.dev"
     source: hosted
-    version: "1.18.0"
+    version: "1.19.0"
+  nativeapi:
+    dependency: transitive
+    description:
+      name: nativeapi
+      sha256: "2f40b3ac356097f56efa8188703159c303ce2b8b078d04c3d2d4afbe95b384ce"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   nested:
     dependency: transitive
     description:
@@ -187,6 +211,46 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.5+1"
+  screen_retriever:
+    dependency: transitive
+    description:
+      name: screen_retriever
+      sha256: ace919117a7520c13a50a6259e60c4a0d4cbe98809468792a91b5c5adada2aa6
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
+  screen_retriever_linux:
+    dependency: transitive
+    description:
+      name: screen_retriever_linux
+      sha256: "7b52006a5ceae1f3d5af7f77188c3290d6e7d8ded16d99809bea84967c65c257"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
+  screen_retriever_macos:
+    dependency: transitive
+    description:
+      name: screen_retriever_macos
+      sha256: a1489b99cce597c45a54b9aae1cd94c8d4705353b7e0bb2457a6e4de44e0ad8a
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
+  screen_retriever_platform_interface:
+    dependency: transitive
+    description:
+      name: screen_retriever_platform_interface
+      sha256: "94a5535277510a63184ca178ce12a1449bc0b38618879aa1c18bf57369c5064a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
+  screen_retriever_windows:
+    dependency: transitive
+    description:
+      name: screen_retriever_windows
+      sha256: dafc6922b0bfbf1d48cf3ccbf519b4fff47bdcb820da1728ea6db675fecc9324
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -272,6 +336,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.2"
+  tray_manager:
+    dependency: "direct main"
+    description:
+      name: tray_manager
+      sha256: "1f504e8e858cf44af1f5147df05d68ef735902d3259eac69aafc8afd8ee38a0e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   typed_data:
     dependency: transitive
     description:
@@ -284,10 +356,10 @@ packages:
     dependency: transitive
     description:
       name: vector_math
-      sha256: d530bd74fea330e6e364cda7a85019c434070188383e1cd8d9777ee586914c5b
+      sha256: "92b9910f66ed1057fd4da7b040ae7c74cafacf885bdc81be496928d5049b032d"
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.0"
+    version: "2.4.3"
   web:
     dependency: transitive
     description:
@@ -296,6 +368,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  window_manager:
+    dependency: "direct main"
+    description:
+      name: window_manager
+      sha256: "05c231fd7b23d2380f14c5cc10b7b93d60d4fa4a2fb4e0f032de27e44b5560e9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.2"
   xdg_directories:
     dependency: transitive
     description:
@@ -305,5 +385,5 @@ packages:
     source: hosted
     version: "1.1.0"
 sdks:
-  dart: ">=3.10.0-0 <4.0.0"
-  flutter: ">=3.35.0"
+  dart: ">=3.13.0 <4.0.0"
+  flutter: ">=3.47.0"

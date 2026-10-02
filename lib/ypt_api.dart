@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'history_models.dart';
 import 'models.dart';
 import 'social_auth.dart';
 
-/// YPT API 클라이언트. RE 스펙(YPT_API_SPEC_FINAL.md) 기반.
+/// YPT API 클라이언트. RE 스펙 (YPT_API_SPEC_FINAL.md) 기반.
 /// base=https://pi.tgclab.com, 인증=Authorization: JWT <token>.
 class YptApi {
   static const String base = 'https://pi.tgclab.com';
@@ -327,7 +328,7 @@ class YptApi {
       'startedAt': startedAtMs,
       'endedAt': endedAtMs,
       'minutes': (endedAtMs - startedAtMs) ~/ 60000,
-      if (tag != null) 'tag': tag,
+      'tag': ?tag,
       'deviceModel': deviceModel,
     });
     _ensureOk(r, 'rest/record');
@@ -347,7 +348,7 @@ class YptApi {
       'startedAt': startedAtMs,
       'endedAt': endedAtMs,
       'minutes': (endedAtMs - startedAtMs) ~/ 60000,
-      if (tag != null) 'tag': tag,
+      'tag': ?tag,
       'deviceModel': deviceModel,
     });
     _ensureOk(r, 'rest/add');
@@ -365,8 +366,8 @@ class YptApi {
   }) async {
     final r = await _post('/rest/edit', {
       'startedAt': startedAtMs,
-      if (endedAtMs != null) 'endedAt': endedAtMs,
-      if (tag != null) 'tag': tag,
+      'endedAt': ?endedAtMs,
+      'tag': ?tag,
       'deviceModel': deviceModel,
     });
     _ensureOk(r, 'rest/edit');
@@ -399,7 +400,7 @@ class YptApi {
     required String tag,
   }) async {
     final r = await _post('/rest/tags/edit', {
-      if (original != null) 'original': original,
+      'original': ?original,
       'tag': tag,
       'deviceModel': deviceModel,
     });

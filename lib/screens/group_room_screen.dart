@@ -74,11 +74,11 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: Colors.grey[400], fontSize: 12)),
+                                color: Color(0xFFBDBDBD), fontSize: 12)),
                       const SizedBox(height: 4),
                       Text('${g.category} · ${g.memberCount} members · owner ${g.owner}',
                           style: TextStyle(
-                              color: Colors.grey[500], fontSize: 11)),
+                              color: Color(0xFF9E9E9E), fontSize: 11)),
                     ],
                   ),
                 ),
@@ -127,12 +127,12 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                 if (members.isEmpty) {
                   return Center(
                       child: Text('No members visible (private group)',
-                          style: TextStyle(color: Colors.grey[600])));
+                          style: TextStyle(color: Color(0xFF757575))));
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: members.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final m = members[i];
                     return ListTile(
@@ -168,7 +168,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(m.category,
                           style: TextStyle(
-                              color: Colors.grey[600], fontSize: 12)),
+                              color: Color(0xFF757575), fontSize: 12)),
                       trailing: Text(fmtMs(m.studyMs),
                           style: const TextStyle(
                               color: Colors.grey,

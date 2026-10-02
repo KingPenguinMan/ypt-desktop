@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../history_models.dart';
-import '../main.dart' show kBrand, kCard;
 
 /// 扇形图（科目占比）。
 ///
@@ -38,7 +37,7 @@ class _SubjectPieChartState extends State<SubjectPieChart> {
         height: widget.size,
         child: const Center(
           child: Text('No study data yet',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
         ),
       );
     }

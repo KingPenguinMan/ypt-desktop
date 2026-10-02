@@ -64,7 +64,7 @@ class _HistoryViewState extends State<HistoryView> {
           const SizedBox(height: 4),
           Text(
             'Last 90 days · tap a day for details',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            style: TextStyle(color: Color(0xFF757575), fontSize: 12),
           ),
           const SizedBox(height: 16),
           if (st.historyErrorText != null) ...[
@@ -234,7 +234,7 @@ class _GapSectionState extends State<_GapSection> {
         const SizedBox(height: 4),
         Text(
           'Gaps between study sessions, and what you said you were doing.',
-          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+          style: TextStyle(color: Color(0xFF757575), fontSize: 11),
         ),
         const SizedBox(height: 10),
         if (_loading)
@@ -255,16 +255,16 @@ class _GapSectionState extends State<_GapSection> {
             child: Column(
               children: [
                 const Icon(Icons.self_improvement,
-                    size: 22, color: Colors.grey[600]),
+                    size: 22, color: Color(0xFF757575)),
                 const SizedBox(height: 8),
                 const Text('No gaps recorded today',
                     style:
-                        TextStyle(fontSize: 13, color: Colors.grey[600])),
+                        TextStyle(fontSize: 13, color: Color(0xFF757575))),
                 const SizedBox(height: 4),
                 const Text(
                   'Stop the timer, wait a bit, then start again — you\'ll be asked what you did in between.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
                 ),
               ],
             ),
@@ -273,14 +273,14 @@ class _GapSectionState extends State<_GapSection> {
           for (final e in _entries.take(12))
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: _GapRow(entry: e),
+              child: _GapRow(entry: e, onChanged: _load),
             ),
           if (_entries.length > 12)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text('…另有 ${_entries.length - 12} 条',
                   style:
-                      const TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      const TextStyle(fontSize: 11, color: Color(0xFF757575))),
             ),
         ],
       ],
@@ -290,7 +290,13 @@ class _GapSectionState extends State<_GapSection> {
 
 class _GapRow extends StatelessWidget {
   final GapInterval entry;
-  const _GapRow({required this.entry});
+  /// 删除成功后通知父级刷新列表。
+  ///
+  /// 不能在这里直接调父级的 _load——_GapRow 是独立类，拿不到
+  /// _GapSectionState 的方法。
+  final VoidCallback onChanged;
+
+  const _GapRow({required this.entry, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -306,7 +312,7 @@ class _GapRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border(
           left: BorderSide(
-            color: tag == null ? Colors.grey[600]! : kBrand,
+            color: tag == null ? Color(0xFF757575)! : kBrand,
             width: 2.5,
           ),
         ),
@@ -343,7 +349,7 @@ class _GapRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           color: activity.isEmpty
-                              ? Colors.grey[600]
+                              ? Color(0xFF757575)
                               : Colors.white,
                         ),
                       ),
@@ -354,7 +360,7 @@ class _GapRow extends StatelessWidget {
                 Text(
                   '${_hm(start)} · ${_fmtDur(dur)}',
                   style:
-                      const TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
                 ),
               ],
             ),
@@ -366,8 +372,7 @@ class _GapRow extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8),
             icon: const Icon(Icons.delete_outline, color: Colors.grey),
             tooltip: 'Delete',
-            onPressed: () => _confirmDelete(context, entry),
-          ),
+            onPressed: () => _confirmDelete(context, entry),          ),
         ],
       ),
     );
@@ -395,7 +400,7 @@ class _GapRow extends StatelessWidget {
     );
     if (ok == true) {
       await app.deleteGap(gap);
-      await _load();
+      onChanged();
     }
   }
 }

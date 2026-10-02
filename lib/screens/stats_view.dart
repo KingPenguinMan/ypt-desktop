@@ -97,7 +97,7 @@ class _StatsViewState extends State<StatsView> {
               'Category Ranking${user.category.isNotEmpty ? ' · ${user.category}' : ''}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           Text('Top studiers in your category (not a group)',
-              style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+              style: TextStyle(color: Color(0xFF757575), fontSize: 11)),
           const SizedBox(height: 10),
           // 주기 전환. API 가 이미 day/week/month 를 지원하는데 UI 에 고정돼
           // 있었던 것을 드러낸 것.
@@ -166,7 +166,7 @@ class _StatsViewState extends State<StatsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          Text(label, style: TextStyle(color: Color(0xFFBDBDBD), fontSize: 12)),
           const SizedBox(height: 4),
           Text(value,
               style: const TextStyle(
@@ -213,7 +213,7 @@ class _PeriodChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? kBrand : Colors.grey[400],
+              color: selected ? kBrand : Color(0xFFBDBDBD),
             ),
           ),
         ),
