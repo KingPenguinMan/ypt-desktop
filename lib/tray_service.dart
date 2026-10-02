@@ -169,6 +169,18 @@ class TrayService {
       };
       final lid = icon.addListener(_trayListener!);
       AppLog.step('addListener', 'ok (id=$lid)');
+
+      // 右键弹出菜单。
+      //
+      // **必须显式设置**：ContextMenuTrigger 的默认值是枚举第一项 `none`，
+      // 意思是"不自动弹"。只调用 setContextMenu 只是把菜单挂上去，
+      // 并不会告诉托盘"什么时候显示它" —— 结果就是右键毫无反应。
+      //
+      // 之前正是漏了这一步：setContextMenu 一直返回 ok，日志看起来一切正常，
+      // 但点右键什么都不发生。
+      icon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
+      AppLog.step('setContextMenuTrigger',
+          '${icon.getContextMenuTrigger()}');
     } catch (e, st) {
       // 失败就把 native handle 还回去，并保持 _icon 为 null。
       AppLog.error('_setupTray 中途失败', e, st);
@@ -443,4 +455,4 @@ String _hms(Duration d) {
 ///
 /// 与 assets/tray/tray_icon.png 是同一张图，改图时两边要同步。
 const String kTrayIconPngBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAjklEQVR42mNgGErgRajuBSD+TwBfoLalvURYigv3Umr5Qwosh+GH5FqOYRixAJteiiwnF5DlCGpZTpYj0OOcWoCoNIGe2qkNCOYOWlqOzRGDywHIJRytAdYSkx6+xxsKow4YdcCoAwaDAwa2IBqtCwZFdTzgDZJB0SQbFI3SQdEsHxQdk0HRNRsUnVNaAwAyBewA2r50YQAAAABJRU5ErkJggg==';
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA7UlEQVR42s1XyQ3DIBDkTwnUkE74pgxKoAT3Rgv80gWBZCPZlq2wF7DSfCzbM9p7jUHa6/lwFb4iVERAgGfOaBiQNqJUUf4gwbtOgthWbB2kd2jfWip5c2lmkP/Q/uGx5EGA+IwgSn42ERHg9qIooNyGAxIuDxCQLxMTm+0MAZ/quKrzMlBAOfQJaByjBcS9gDRBQCK7X0jANwyY0lMQ4Mldr8e6GhMlAQUFxCUEkAePVAi8wuRDJaGbKMCRG5EAEqsVCyCyhpGY+6njmImNvZAwl1TLXslYpTdhI9bZjFXIlzhMljjNljhOR5znb5y23PNt3hfKAAAAAElFTkSuQmCC';
