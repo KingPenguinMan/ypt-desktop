@@ -37,26 +37,37 @@ class YptApp extends StatefulWidget {
 }
 
 class _YptAppState extends State<YptApp> {
+  /// 供 dispose 时对称移除监听。ChangeNotifier 不持有监听者，
+  /// 若不移除，AppState 会一直回调已销毁的托盘。
+  VoidCallback? _traySync;
+
   @override
   void initState() {
     super.initState();
-    // 登录状态就绪后再建托盘——托盘菜单要用到 user/科目，登录前建没有内容。
+    // 托盘菜单要用到 user/科目，登录前建没有内容，所以等首帧之后再建。
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final app = context.read<AppState>();
-      if (!_trayReady) {
-        _trayReady = true;
-        final tray = TrayService(app);
-        await tray.init();
-        _tray = tray;
-        // AppState 每次 notify 都同步托盘菜单（状态行、开始/停止项、空档入口）。
-        app.addListener(tray.sync);
+      if (_tray != null) return;
+      final tray = TrayService(app);
+      _tray = tray;
+      await tray.init();
+      if (!mounted) {
+        // init 期间 widget 可能已被销毁。
+        tray.dispose();
+        _tray = null;
+        return;
       }
+      // AppState 每次 notify 都同步托盘菜单（状态行、开始/停止项、空档入口）。
+      _traySync = tray.sync;
+      app.addListener(_traySync!);
     });
   }
 
   @override
   void dispose() {
-    // AppState 是 Provider 创建的，会自行 dispose；这里只清理托盘。
+    // AppState 由 Provider 创建，会自行 dispose；这里只清理托盘侧。
+    _traySync = null;
     _tray?.dispose();
     _tray = null;
     super.dispose();
@@ -115,4 +126,3 @@ class _YptAppState extends State<YptApp> {
   }
 }
 
-bool _trayReady = false;
