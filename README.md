@@ -1,112 +1,89 @@
-# YPT Desktop Client
+# YPT 桌面客户端（非官方）
 
-Unofficial Flutter desktop client, Flutter web demo, and Next.js landing page
-for YPT / 열품타.
+YPT / 열품타 的非官方桌面客户端。使用 Flutter 编写，支持 Windows / Linux /
+macOS 桌面端，另附一个 Flutter Web 演示页和一个 Next.js 落地页。
 
-[Korean README](README_ko.md)
+> [Korean README（上游原始文档）](README_ko.md)
 
-![YPT Desktop Client landing hero](landing/public/hero-dashboard.png)
+![界面截图](landing/public/hero-dashboard.png)
 
-## About This Fork
+---
 
-This repository is a fork of **[deveworld/ypt_client](https://github.com/deveworld/ypt_client)**
-(maintained by [@deveworld](https://github.com/deveworld), originally by Gi Hyeon Sim),
-kept at [KingPenguinMan/ypt-desktop](https://github.com/KingPenguinMan/ypt-desktop). All credit for the original
-client, the reverse-engineered API layer, and the landing page belongs to the
-original author. The upstream project is MIT-licensed; this fork keeps that
-license and the original copyright notice — see [LICENSE](LICENSE).
+## 关于本仓库
 
-**If you only want the upstream client, use the original repository.**
-The fork exists because the additions below were needed for daily desktop use.
+本仓库基于 **[deveworld/ypt_client](https://github.com/deveworld/ypt_client)** 开发。
 
-### What this fork adds
+**原作者：Gi Hyeon Sim（GitHub [@deveworld](https://github.com/deveworld)）**
+原始客户端、API 逆向层与落地页均出自其手，版权归原作者所有。
 
-| Area | Addition |
+本仓库是面向日常桌面使用而做的分支（fork），在原作者成果之上补充了若干功能，
+详见下方「相对上游的增补」。**如果你只需要上游的原始客户端，请直接使用
+[上游仓库](https://github.com/deveworld/ypt_client)。**
+
+许可证沿用上游的 MIT，且完整保留了原始版权声明 —— 见 [LICENSE](LICENSE)。
+
+---
+
+## 免责声明
+
+- 本项目**非官方**，与 YPT、Pallo Inc. 及相关权利方无任何隶属、赞助或认可关系。
+- **仅供个人账号互通使用。** 不用于操作他人账号、滥用自动化或伪造学习时长。
+- 客户端访问 YPT 未公开的 HTTPS 接口（`pi.tgclab.com`）。**该接口随时可能变更
+  导致功能失效，且使用方式可能与服务条款冲突。** 风险自负。
+- 登录使用邮箱与密码换取 JWT，JWT 通过 `shared_preferences` 明文存储在本地。
+- 上游项目曾借助 Codex（GPT 5.5）撰写文档，并在 APK 逆向过程中参考过 Claude 的建议。
+
+---
+
+## 相对上游的增补
+
+| 方面 | 本 fork 增加的内容 |
 |---|---|
-| **Timer durability** | The running timer is persisted to disk, so killing the process (or a crash) no longer loses the session. On next launch the timer is restored and can be stopped normally — previously the server kept counting while the client had forgotten the session. |
-| **System tray** | Tray icon with a live status line (`Subject 1:23:45` / `Not studying · today 4h 9m`), start/stop from the tray, per-subject submenu, hide-to-tray on close, and a real Quit that stops the server-side session first. |
-| **History view** | Calendar heat-map of daily study time plus a subject-share donut chart. Both the ring and the legend respond to hover, and clicking pins a subject. |
-| **Untimed-gap log** | When you stop the timer and start again, the gap between sessions can be recorded ("what were you doing?"). Gaps under 1 minute are discarded rather than logged, and any entry can be edited later from the History tab. |
-| **Windows build pipeline** | `build_and_test.bat` — runs `flutter analyze`, a static self-check, 71 logic assertions, the release build, and packaging, with preflight checks for the C++ toolchain and for an already-running instance. |
-| **Static self-check** | `tool/staticcheck.dart` catches duplicate member declarations and unused imports. Needed because this environment cannot run `dart analyze` (it forks a helper process). |
-| **Diagnostic logging** | Release builds have no console, so tray/window/gap events are written to `%LOCALAPPDATA%\ypt_client\ypt.log`. Run `open_log.bat` to open it. |
-| **Windows build fix** | MSVC reads sources as the system code page; several runner sources are UTF-8 with non-ASCII comments, which failed with `C2220`/`C4819` on Chinese Windows. Fixed by adding `/utf-8` to the runner target. |
-| **API notes** | `docs/API_ENDPOINTS.md` (endpoint table) and `docs/DEPENDENCY_API_NOTES.md` (verified third-party package APIs, including several traps). |
+| **计时状态持久化** | 正在进行的计时会落盘。杀死进程或崩溃后重新打开，计时状态会恢复并可正常停止 —— 修复前服务端会继续累计时长，而客户端已经忘了这个会话。 |
+| **系统托盘常驻** | 托盘图标带实时状态行（`数学 1:23:45` / `未在计时 · 今日 4h 9m`），可从托盘开始/停止、按科目展开子菜单、点关闭按钮隐藏到托盘；「退出」会先停掉服务端会话再退出。 |
+| **历史视图** | 日历热力图（每日学习时长分档）＋ 科目占比环形图。圆环与图例均支持悬停聚焦，点击可固定选中。 |
+| **空档记录** | 停止计时后再次开始时，可记录中间这段时间在做什么。**不足 1 分钟的空档直接丢弃**（不产生无意义记录），已有记录可在历史页补填。 |
+| **Windows 构建流水线** | `build_and_test.bat`：静态分析 → 静态自检 → 逻辑自检 → 发布构建 → 打包，并带 C++ 工具链与「实例是否在运行」的前置检查。 |
+| **静态自检工具** | `tool/staticcheck.dart` 检查同类内重复成员声明与未使用的 import。本环境无法运行 `dart analyze`（需要派生子进程），故自建。 |
+| **诊断日志** | 发布版没有控制台，托盘/窗口/空档的关键事件写入 `%LOCALAPPDATA%\ypt_client\ypt.log`，运行 `open_log.bat` 可直接打开。 |
+| **Windows 构建修复** | MSVC 默认按系统代码页读取源文件，而 runner 下若干源文件是带非 ASCII 注释的 UTF-8，在中文 Windows 上会报 `C2220`/`C4819`。已为 runner 目标加上 `/utf-8`。 |
+| **接口与依赖文档** | `docs/API_ENDPOINTS.md`（接口表）、`docs/DEPENDENCY_API_NOTES.md`（逐符号核对过的三方包 API，含若干踩坑记录）。 |
 
-### Credentials are not in this repository
+---
 
-The OAuth `clientId` / `clientSecret` values that the upstream project had
-hardcoded in `lib/social_auth.dart` were removed. They belong to third parties
-and should not be redistributed. They now live in `lib/social_credentials.dart`,
-which is **gitignored**; a template is provided at
-`lib/social_credentials.example.dart`. See "Build From Source" below.
+## 凭证不在本仓库
 
-Note: those values are still present in the upstream repository and in this
-repository's earlier history. Removing them from the working tree prevents
-further redistribution but does not un-publish them.
+上游把 OAuth 的 `clientId` / `clientSecret` 硬编码在 `lib/social_auth.dart` 里。
+这些是**第三方服务的凭证**，不宜再分发，因此本仓库已将其移出：
 
-## Important Notice
+| 文件 | 是否入库 | 用途 |
+|---|---|---|
+| `lib/social_credentials.dart` | **否**（已加入 `.gitignore`） | 存放真实凭证，仅存在于本地 |
+| `lib/social_credentials.example.dart` | 是 | 占位模板 |
 
-- This project is **unofficial** and is not affiliated with, sponsored by, or
-  endorsed by YPT, Pallo Inc., or related rights holders.
-- It is intended only for personal-account interop. It is not intended for
-  manipulating another account, automation abuse, or study-time fabrication.
-- The client talks to YPT's undocumented HTTPS API at `pi.tgclab.com`.
-  Behavior can break without warning and may conflict with service terms.
-- Email and password are used for the YPT login request. The login JWT is stored
-  locally through `shared_preferences`.
-- Also, I used Codex (GPT 5.5) for the document part, and got some advice from Claude AI on APK reverse engineering.
+首次构建前请复制模板并填入。若只用邮箱密码登录，可跳过此步 —— 应用照样能构建，
+只是点击社交登录时会提示「未配置」。
 
-## What It Does
+> 需要说明：这些凭证在上游仓库中仍然公开存在，本仓库只是不再继续分发它们。
 
-YPT Desktop Client lets you use core YPT study flows from a desktop-shaped
-interface:
+---
 
-- Email login with local JWT auto-login
-- Per-subject study timer start and stop
-- Daily study time, subject totals, and category ranking
-- Joined groups, browsable groups, and group member activity
-- Flutter desktop build targets for Linux, Windows, and macOS
-- Flutter web build mounted under the landing page at `/demo/`
+## 从源码构建
 
-## Download From GitHub Releases
-
-Prebuilt desktop assets for **this fork** are attached to
-[GitHub Releases](https://github.com/KingPenguinMan/ypt-desktop/releases):
-
-- Linux x64 `.tar.gz` plus `.sha256`
-- Windows x64 `.zip` plus `.sha256`
-- macOS x64 `.zip` plus `.sha256`
-
-For the upstream project's own releases, see
-[deveworld/ypt_client/releases](https://github.com/deveworld/ypt_client/releases).
-The two are built from different code — pick whichever matches what you want.
-
-These are packaged Flutter build outputs. The current workflow does not sign or notarize installers.
-
-You may need libwebkit2gtk-4.1-0
-
-## Build From Source
-
-### 1. Provide the OAuth credentials
-
-Social login needs credentials that are **not** committed (see "Credentials are
-not in this repository" above). For email/password login you can skip this and
-leave the placeholders in place — the app builds either way, and social login
-will report that it is not configured.
+### 1. 准备凭证（可选）
 
 ```bash
 cp lib/social_credentials.example.dart lib/social_credentials.dart
-# then edit lib/social_credentials.dart and fill in the three values
+# 然后编辑 lib/social_credentials.dart，填入三个值
 ```
 
-Verify the file is ignored before you commit anything:
+提交前确认该文件确实被忽略：
 
 ```bash
 git check-ignore -v lib/social_credentials.dart
 ```
 
-### 2. Run a development build
+### 2. Linux 开发构建
 
 ```bash
 flutter doctor
@@ -114,161 +91,103 @@ flutter pub get
 flutter run -d linux
 ```
 
-Build a Linux release locally:
+本地发布构建：
 
 ```bash
 flutter build linux --release
 ```
 
-The Linux executable bundle is generated under:
+产物位于 `build/linux/x64/release/bundle/`。
 
-```text
-build/linux/x64/release/bundle/
-```
-
-### Windows
-
-`build_and_test.bat` runs the whole pipeline (static analysis, static
-self-check, logic self-tests, release build, packaging):
+### 3. Windows
 
 ```bat
 build_and_test.bat
 ```
 
-It needs the Visual Studio "Desktop development with C++" workload, because
-`cnativeapi` (pulled in by `tray_manager`) compiles C++ at build time.
-Release builds produce no console output — runtime diagnostics go to
-`%LOCALAPPDATA%\ypt_client\ypt.log`, and `open_log.bat` opens that file.
+该脚本依次执行静态分析、静态自检、逻辑自检、发布构建与打包。
 
-### Other platforms
+**前置要求**：需要 Visual Studio 的「使用 C++ 的桌面开发」工作负载 ——
+`tray_manager` 依赖的 `cnativeapi` 会在构建时现场编译 C++。
 
-Desktop builds should be produced on the matching host OS. For cross-platform
-release assets, use the GitHub Actions workflow described below.
+**排错**：发布版没有控制台输出，运行期诊断写入
+`%LOCALAPPDATA%\ypt_client\ypt.log`，用 `open_log.bat` 打开。
+构建失败时脚本会按错误信息分类给出提示。
 
-## Web Demo And Landing
+### 4. 其他平台
 
-The project has two web surfaces:
+桌面产物应在对应宿主系统上构建。需要跨平台的发布产物时，使用下文的
+GitHub Actions 工作流。
 
-- `web/`: Flutter web target for the app demo
-- `landing/`: static Next.js landing page
+---
 
-Run the landing page locally:
+## 运行检查
 
-```bash
-cd landing
-npm ci
-npm run dev
-```
-
-Build the static landing page:
+两个自检套件和静态自检都是纯 Dart 脚本，**不需要 Flutter SDK 或设备**：
 
 ```bash
-cd landing
-npm run build
+dart run tool/selftest.dart        # 逻辑断言
+dart run tool/calendartest.dart    # 日期解析与热力图分档
+dart run tool/staticcheck.dart     # 重复成员声明、未使用的 import
 ```
 
-Build the Flutter web demo manually:
+在 Windows 上可用 `build_and_test.bat` 一次跑完全部检查与发布构建。
 
-```bash
-flutter pub get
-flutter build web --release --base-href /demo/
-```
+---
 
-The GitHub Pages workflow builds both surfaces, copies `build/web/` into
-`landing/out/demo/`, and deploys `landing/out`.
-
-## GitHub Actions
-
-### Pages Deploy
-
-`.github/workflows/deploy-web.yml` runs on `main` when these areas change:
-
-- `landing/**`
-- `web/**`
-- `lib/**`
-- `pubspec.yaml`
-- `pubspec.lock`
-- the deploy workflow itself
-
-The workflow builds `landing/` as a static Next.js export, builds the Flutter
-web demo from the root `web/` target, copies `build/web/` into
-`landing/out/demo/`, and deploys `landing/out/`.
-
-For project Pages repositories, the workflow uses `/<repo>` as the Next.js base
-path and `/<repo>/demo/` as the Flutter web base href. For `*.github.io`
-repositories, it uses the domain root and `/demo/`.
-
-### Prebuilt Desktop Release Assets
-
-`.github/workflows/release-desktop.yml` is a manual `workflow_dispatch`
-workflow. Give it an existing GitHub Release tag, and it builds/uploads:
-
-- Linux x64 `.tar.gz` plus `.sha256`
-- Windows x64 `.zip` plus `.sha256`
-- macOS x64 `.zip` plus `.sha256`
-
-The workflow uses OS-specific GitHub-hosted runners. Flutter desktop does not
-support building Windows and macOS desktop apps from a Linux host just by
-installing another compiler toolchain.
-
-## Project Layout
+## 项目结构
 
 ```text
-lib/                       Flutter app source
-  app_state.dart           Provider state for auth, timer, stats, groups
-  ypt_api.dart             YPT API client
-  models.dart              API response models
-  screens/                 Login, home, timer, stats, group screens
-  history_models.dart      History view models (heat-map bins, pie slices)
-  timer_persistence.dart   On-disk snapshot of the running timer
-  gap_log.dart             Untimed-gap records (see "About This Fork")
-  tray_service.dart        System tray icon, menu, window close behaviour
-  app_log.dart             File logger (release builds have no console)
-  social_credentials.dart  OAuth credentials — GITIGNORED, not in this repo
-  social_credentials.example.dart   Template for the above
+lib/                       Flutter 应用源码
+  app_state.dart           登录 / 计时 / 统计 / 群组的状态管理
+  ypt_api.dart             YPT 接口客户端
+  models.dart              接口响应模型
+  screens/                 登录、主页、计时、统计、群组等界面
+  history_models.dart      历史视图模型（热力图分档、环形图切片）
+  timer_persistence.dart   进行中计时的本地快照
+  gap_log.dart             空档记录（见「相对上游的增补」）
+  tray_service.dart        托盘图标、菜单、窗口关闭行为
+  app_log.dart             文件日志（发布版无控制台）
+  social_credentials.dart  第三方凭证 —— 不入库
+  social_credentials.example.dart   上述文件的模板
 
-tool/                      Standalone Dart scripts (no Flutter dependency)
-  selftest.dart            71 pure-logic assertions
-  calendartest.dart        Date/heat-map parsing assertions
-  staticcheck.dart         Duplicate members + unused imports
+tool/                      独立 Dart 脚本（不依赖 Flutter）
+  selftest.dart            逻辑断言
+  calendartest.dart        日期与热力图解析断言
+  staticcheck.dart         重复成员声明、未使用的 import
 
-docs/                      Reverse-engineering and dependency notes
-assets/tray/               Tray icon (white hourglass, transparent)
-build_and_test.bat         Windows: analyze + checks + build + package
-open_log.bat               Windows: open the runtime log
+docs/                      接口逆向与依赖核对笔记
+assets/tray/               托盘图标（白色沙漏，透明底）
+build_and_test.bat         Windows：检查 + 构建 + 打包
+open_log.bat               Windows：打开运行期日志
 
-linux/                     Flutter Linux desktop target
-macos/                     Flutter macOS desktop target
-windows/                   Flutter Windows desktop target
-web/                       Flutter web demo target
-landing/                   Next.js static landing page
-.github/workflows/         Pages deploy and desktop release workflows
+linux/  macos/  windows/   各平台桌面目标
+web/                       Flutter Web 演示
+landing/                   Next.js 静态落地页
+.github/workflows/         网页部署与桌面发布工作流
 ```
 
-## Running the checks
+---
 
-The two assertion suites and the static check are plain Dart and do **not** need
-the Flutter SDK or a device:
+## 与上游同步
+
+本仓库把上游保留为 `upstream` 远程：
 
 ```bash
-dart run tool/selftest.dart        # 71 assertions
-dart run tool/calendartest.dart    # date / heat-map parsing
-dart run tool/staticcheck.dart     # duplicate members, unused imports
+git remote -v
+# origin    https://github.com/KingPenguinMan/ypt-desktop.git
+# upstream  https://github.com/deveworld/ypt_client.git
+
+git fetch upstream
+git merge upstream/main      # 或 git rebase upstream/main
 ```
 
-Run all of them plus the release build on Windows with `build_and_test.bat`.
+注意：本仓库的历史经过改写（移除了凭证、调整了初始提交），因此与上游的提交
+SHA 并不一一对应，合并时可能需要手工处理冲突。
 
-## Development Checklist
+---
 
-- Keep undocumented API behavior isolated in `lib/ypt_api.dart`.
-- Keep response parsing defensive; the API may change field names or value
-  types.
-- Run `flutter analyze` before shipping Flutter changes when the Flutter SDK is
-  available.
-- Run `npm run build` inside `landing/` before shipping landing page changes.
-- Run `flutter build web --release --base-href /demo/` before shipping web demo
-  changes.
+## 许可证
 
-## License
-
-[MIT](LICENSE)
+[MIT](LICENSE) —— 原始版权归 deveworld（Gi Hyeon Sim）所有，本分支的改动
+同样以 MIT 发布。
