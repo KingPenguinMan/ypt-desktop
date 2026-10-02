@@ -6,6 +6,7 @@ import '../gap_log.dart';
 import '../history_models.dart';
 import '../main.dart' show kBrand, kCard;
 import 'calendar_heatmap.dart';
+import 'gap_prompt_dialog.dart';
 import 'subject_pie_chart.dart';
 
 /// 日历/热力图 + 扇形图。独立成页而非塞进 StatsView。
@@ -72,6 +73,19 @@ class _HistoryViewState extends State<HistoryView> {
             const SizedBox(height: 8),
           ],
 
+          // ── 待补录的空档提示 ──
+          // 重启后恢复的未闭合空档会出现在这里，不会丢失。
+          if (st.hasPendingGap && st.pendingGap!.isOpen) ...[
+            const SizedBox(height: 14),
+            _PendingGapBanner(gap: st.pendingGap!),
+          ],
+          if (st.gapSyncErrorText != null) ...[
+            const SizedBox(height: 8),
+            Text(st.gapSyncErrorText!,
+                style:
+                    const TextStyle(color: Colors.redAccent, fontSize: 11)),
+          ],
+
           // ── 日历热力图 ──
           Container(
             padding: const EdgeInsets.all(14),
@@ -124,6 +138,44 @@ class _HistoryViewState extends State<HistoryView> {
 
           // ── 空档复盘 ──
           const _GapSection(),
+        ],
+      ),
+    );
+  }
+}
+
+/// 待补录的空档提示条。
+///
+/// 场景：停止计时后弹窗被关掉（崩溃、切标签页、点了 History），空档仍未
+/// 闭合。放在这里给用户一个补录入口，避免"忘记自己在休息"变成永久盲区。
+class _PendingGapBanner extends StatelessWidget {
+  final GapInterval gap;
+  const _PendingGapBanner({required this.gap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: kCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kBrand.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.pending_actions, size: 16, color: kBrand),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '有 ${gap.duration.inMinutes} 分钟未记录',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          TextButton(
+            onPressed: () => GapPromptDialog.maybeShow(context, gap),
+            child: const Text('补录',
+                style: TextStyle(color: kBrand, fontSize: 12)),
+          ),
         ],
       ),
     );
@@ -307,9 +359,44 @@ class _GapRow extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            iconSize: 15,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.only(left: 8),
+            icon: const Icon(Icons.delete_outline, color: Colors.grey),
+            tooltip: 'Delete',
+            onPressed: () => _confirmDelete(context, entry),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, GapInterval gap) async {
+    final app = context.read<AppState>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCard,
+        title: const Text('删除这条记录？', style: TextStyle(fontSize: 16)),
+        content: Text('${_hm(gap.start)} 起的 ${_fmtDur(gap.duration)}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await app.deleteGap(gap);
+      await _load();
+    }
   }
 }
 

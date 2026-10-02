@@ -7,14 +7,18 @@ import '../main.dart' show kBrand, kCard, kCard2;
 
 /// 空档自述对话框。
 ///
-///用途：用户停止计时后、下次开始前，询问"这段不在计时的时间在做什么"。
-/// 这是手机版的既有行为，PC 端同样需要——否则统计里会出现一段无法解释的
-/// 时间空白。
+/// 用途：用户停止计时后立即询问"这段时间在做什么"。
+///
+/// 依据官方 APK(v810.0.85)逆向确认，这是手机版的既有功能，端点为
+/// `/rest/record`、标签经 `/rest/tags/edit` 管理。i18n key
+/// `alert_stop_study_just_now_record` 表明对话框在**停止后立即**弹出，
+/// 而不是"下次开始时"——这一点修正了本客户端的初版设计。
+/// 按钮语义对齐官方的 `study_dialog_rest_record`(记录)与
+/// `study_dialog_rest_skip`(跳过)。
 ///
 /// 设计取舍：
-///  - **不阻塞**：返回 null 表示"暂不填写"，直接开始计时。用户不该被弹窗
-///    挡住学习。可以之后再补。
-///  - **预设优先**：10 个短标签一键选，比让用户打字实际率高得多。
+///  - **不阻塞计时**：点跳过直接开始，用户不该被弹窗挡住学习。
+///  - **预设优先**：短标签一键选，比让用户打字实际率高得多。
 ///  - **跳过多短**：空档不足 1 分钟时问"在做什么"是噪声，直接忽略。
 class GapPromptDialog extends StatefulWidget {
   final GapInterval gap;
@@ -67,6 +71,7 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
     final gap = widget.gap;
     final minutes = gap.duration.inMinutes;
     final scheme = Theme.of(context).colorScheme;
+    final presets = context.read<AppState>().gapPresets;
 
     return AlertDialog(
       backgroundColor: kCard,
@@ -95,7 +100,7 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final tag in context.read<AppState>().gapPresets)
+                for (final tag in presets)
                   _TagChip(
                     label: tag,
                     selected: _tag == tag,
@@ -125,29 +130,33 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
         ),
       ),
       actions: [
+        // 跳过：不记录，直接开始学习（对齐 study_dialog_rest_skip）
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('暂不填写',
+          onPressed: () async {
+            final app = context.read<AppState>();
+            await app.discardPendingGap();
+            if (context.mounted) Navigator.of(context).pop();
+          },
+          child: const Text('跳过',
               style: TextStyle(color: Colors.grey[600], fontSize: 13)),
         ),
+        // 记录：闭合本地 + 同步 /rest/record
         TextButton(
           onPressed: () async {
             final app = context.read<AppState>();
             final activity = _text.text.trim();
-            // 什么都没选也没写 → 视为放弃记录。
-            if (_tag == null && activity.isEmpty) {
-              await app.discardPendingGap();
-            } else {
-              await app.describePendingGap(
-                tag: _tag,
-                activity: activity.isEmpty ? null : activity,
-              );
-            }
+            await app.describePendingGap(
+              tag: _tag,
+              activity: activity.isEmpty ? null : activity,
+            );
+            await app.commitPendingGap();
             if (context.mounted) Navigator.of(context).pop();
           },
-          child: const Text('保存',
-              style:
-                  TextStyle(color: kBrand, fontSize: 13, fontWeight: FontWeight.w600)),
+          child: const Text('记录',
+              style: TextStyle(
+                  color: kBrand,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
         ),
       ],
     );

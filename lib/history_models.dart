@@ -2,7 +2,17 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 
-/// 한天的学习快照。用于日历热力图。
+/// 一天的最小统计量。来源可能是 /logs/calendar/home 或 /logs/range/days。
+class CalendarPoint {
+  final String date; // YYYY-MM-DD
+  final int studyMs;
+
+  const CalendarPoint({required this.date, required this.studyMs});
+
+  Duration get duration => Duration(milliseconds: studyMs);
+}
+
+/// 一段区间的总览数据。
 class DayHistory {
   final String date; // YYYY-MM-DD
   final int totalMs;

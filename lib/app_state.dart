@@ -66,6 +66,9 @@ class AppState extends ChangeNotifier {
 
   bool get hasPendingGap => pendingGap != null;
 
+  /// 空档记录同步到服务端失败的提示。本地已保存,只是云端没成功。
+  String? gapSyncErrorText;
+
   /// 当天已闭合的空档记录（供统计页与复盘页使用）。
   Future<List<GapInterval>> gapEntries() => _gapLog.todayEntries();
 
@@ -202,19 +205,36 @@ class AppState extends ChangeNotifier {
 
   /// 달력 히트맵용 최근 N 일 데이터를 불러온다.
   ///
-  /// 주의: 하루에 요청 1 회이므로[N=90] 이면 90 회 호출이 된다. 그래서
-  /// 병렬로 보내되 실패해도 전체가 죽지 않게 하고, 로딩 표시를 넣는다.
+  /// 두 단계 전략:
+  ///  1. RE 로 확인된批量 엔드포인트(`/logs/calendar/home`,
+  ///     `/logs/range/days`)를 먼저 시도한다. 성공하면 요청 1~2 회로 끝난다.
+  ///  2. 그쪽을 못 읽으면 날짜별로 1 회씩 보낸다(N 회). 실패해도 전체가
+  ///     죽지 않게 하고 로딩 표시를 유지한다.
+  ///
+  /// [days] 는 2번 경로에서만 의미가 있다.
   Future<void> loadHistory({int days = 90}) async {
     if (api.jwt == null) return;
     historyLoading = true;
     historyErrorText = null;
     notifyListeners();
 
+    // ── 1순위:批量 엔드포인트 ──
+    final bulkOk = await _tryLoadHistoryBulk(days: days);
+    if (bulkOk) {
+      // 오늘은 앱 안에서 계산한 값이 정확하므로 덮어쓴다.
+      history[todayStr()] = Duration(milliseconds: todayStudyMs);
+      historyLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    // ── 2순위: 날짜별 조회 ──
     final now = DateTime.now();
     final dates = <String>[];
     for (var i = 0; i < days; i++) {
       final d = now.subtract(Duration(days: i));
-      dates.add('${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}');
+      dates.add(
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}');
     }
 
     int ok = 0;
@@ -235,7 +255,9 @@ class AppState extends ChangeNotifier {
         }
       }
       // 让出一点时间，避免连续打满。
-      if (i + chunk < dates.length) await Future.delayed(const Duration(milliseconds: 120));
+      if (i + chunk < dates.length) {
+        await Future.delayed(const Duration(milliseconds: 120));
+      }
     }
 
     // 오늘은 이미 앱 안에서 계산한 값이 있으므로 덮어쓴다.
@@ -246,6 +268,40 @@ class AppState extends ChangeNotifier {
     }
     historyLoading = false;
     notifyListeners();
+  }
+
+  /// 批量 엔드포인트로 히트맵을 채운다. 성공 여부만 반환.
+  ///
+  /// 응답 구조가 미확인이라 파서가 못 읽을 수 있다. 그럴 때 false 를 돌려
+  /// 호출부가 날짜별 조회로 폴백하게 한다. 파싱은 [YptApi.parseCalendarPoints]
+  /// 가 담당하며, "아무 날짜도 못 뽑았다"면 실패로 간주한다.
+  Future<bool> _tryLoadHistoryBulk({required int days}) async {
+    final now = DateTime.now();
+    final start = now.subtract(Duration(days: days - 1));
+    String fmt(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    // range/days 를 먼저 시도(범위가 명시적이므로 응답 형태가 더 단순할 확률이 높다).
+    for (final attempt in <Future<List<CalendarPoint>> Function()>[
+      () => api.rangeDays(fmt(start), fmt(now)),
+      () => api.calendarHome(),
+    ]) {
+      try {
+        final points = await attempt();
+        if (points.isEmpty) continue;
+        history.clear();
+        for (final p in points) {
+          history[p.date] = p.duration;
+        }
+        // 범위 밖 데이터가 섞여도 무해하므로 걸러내지 않는다.
+        return true;
+      } catch (e) {
+        // 다음 시도로 넘어간다. 인증 실패면 그대로 내려가는 게 맞다.
+        if (e is YptAuthException) rethrow;
+        continue;
+      }
+    }
+    return false;
   }
 
   Future<MapEntry<String, Duration>?> _fetchDayQuietly(String date) async {
@@ -588,6 +644,69 @@ class AppState extends ChangeNotifier {
     pendingGap = null;
     await _gapLog.clearOpen();
     notifyListeners();
+  }
+
+  /// 确认当前空档，闭合本地记录并同步到服务端 /rest/record。
+  ///
+  /// 官方客户端在停止计时后立即询问(`alert_stop_study_just_now_record`),
+  /// 所以调用时机是"对话框点确定"那一刻，此时 startedAt/endedAt 都已确定。
+  ///
+  /// 云端失败**不阻塞**本地记录：这只是一个复盘辅助功能，失败了就退化为
+  /// 本地记录，不该因此丢失数据或中断学习。
+  Future<void> commitPendingGap() async {
+    final gap = pendingGap;
+    if (gap == null) return;
+    // 用户点确定的那一刻作为空档结束时刻。
+    final endedAt = DateTime.now();
+    final closed = gap.copyWith(end: endedAt);
+    await _gapLog.commit(closed);
+    pendingGap = null;
+    gapSyncErrorText = null;
+    notifyListeners();
+
+    // 已回答过的才上报：只是记录时长而无归类时，价值不大且会污染统计。
+    if (!closed.isAnswered) return;
+    try {
+      await api.recordRest(
+        startedAtMs: closed.start.millisecondsSinceEpoch,
+        endedAtMs: endedAt.millisecondsSinceEpoch,
+        tag: closed.tag,
+      );
+    } catch (e) {
+      // 本地已保存,这里只提示云端没成功能。
+      gapSyncErrorText =
+          'Saved locally, but YPT server rejected it: ${_readableError(e)}';
+      notifyListeners();
+    }
+  }
+
+  /// 删除一条已闭合的空档（同时尝试删服务端记录）。
+  Future<void> deleteGap(GapInterval gap) async {
+    await _gapLog.remove(gap);
+    notifyListeners();
+    try {
+      await api.deleteRest(startedAtMs: gap.start.millisecondsSinceEpoch);
+    } catch (e) {
+      // 服务端删不掉不影响本地,用户已经看到列表更新了。
+      debugPrint('deleteRest failed: $e');
+    }
+  }
+
+  /// 编辑已闭合空档的标签。
+  Future<void> retagGap(GapInterval gap, String? tag) async {
+    final updated = gap.copyWith(tag: tag);
+    await _gapLog.update(updated);
+    pendingGap = null;
+    notifyListeners();
+    try {
+      await api.editRest(
+        startedAtMs: updated.start.millisecondsSinceEpoch,
+        tag: tag,
+      );
+    } catch (e) {
+      gapSyncErrorText = 'Tag change not synced: ${_readableError(e)}';
+      notifyListeners();
+    }
   }
 
   /// 恢复上次会话（应用启动时调用）。

@@ -239,13 +239,14 @@ class _SubjectCard extends StatelessWidget {
     void toggle() {
       final app = context.read<AppState>();
       if (active) {
-        app.stopTimer();
-      } else {
-        // 开始新科目之前，若上一段空档够长就先问"这段时间在做什么"。
-        // 补录完（或选择暂不填写）才真正开始计时，保证空档区间闭合。
-        GapPromptDialog.maybeShow(context, app.pendingGap).then((_) {
-          app.startTimer(s);
+        // 停止后立即询问"这段时间在做什么"。
+        // 官方客户端同样是停止即弹（i18n key
+        // alert_stop_study_just_now_record），此时空档区间已确定。
+        app.stopTimer().then((_) {
+          if (mounted) GapPromptDialog.maybeShow(context, app.pendingGap);
         });
+      } else {
+        app.startTimer(s);
       }
     }
 

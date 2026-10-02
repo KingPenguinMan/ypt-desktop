@@ -232,6 +232,33 @@ void main() {
   check('含引号 -> 翻倍并包裹', csvCell('say "hi"') == '"say ""hi"""');
   check('含换行 -> 加引号', csvCell('a\nb') == '"a\nb"');
 
+
+  print('\n=== 休息记录(rest)端点字段 ===');
+  // 官方 APK 逆向确认的字段名。这几个名字如果写错,服务端会静默忽略。
+  const restFields = ['startedAt', 'endedAt', 'minutes', 'tag', 'deviceModel'];
+  check('rest 字段集完整', restFields.length == 5);
+  check('startedAt 语义为epoch ms',
+      1700000000000 == DateTime.fromMillisecondsSinceEpoch(1700000000000).millisecondsSinceEpoch);
+  // minutes 换算:rest 用分钟,study 用毫秒,单位不一致是最容易写错的点
+  final s2 = 1700000000000;
+  final e2 = s2 + 25 * 60 * 1000;
+  check('25분 -> minutes=25', (e2 - s2) ~/ 60000 == 25);
+  check('90초 -> minutes=1(截断)', (90 * 1000) ~/ 60000 == 1);
+  check('59분59초 -> minutes=59', ((59 * 60 + 59) * 1000) ~/ 60000 == 59);
+
+  print('\n=== GapLog remove/update 的键匹配 ===');
+  // 用 start 匹配而非对象相等 —— GapInterval 未实现 ==,直接 remove 会失效。
+  final g1 = GapInterval(
+      start: t0, end: t0.add(const Duration(minutes: 5)), tag: 'x');
+  final g2 = GapInterval(
+      start: t0.add(const Duration(hours: 1)),
+      end: t0.add(const Duration(hours: 1, minutes: 3)),
+      tag: 'y');
+  check('两条记录 start 不同', g1.start != g2.start);
+  check('同 start 视为同一条', g1.start == g1.copyWith(tag: 'z').start);
+  check('update 不会误删邻居',
+      g1.copyWith(tag: 'z').tag == 'z' && g2.tag == 'y');
+
   print('\n=== 结果 ===');
   print('  passed: $_pass   failed: $_fail');
   if (_fail > 0) {

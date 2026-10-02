@@ -144,6 +144,42 @@ class GapLog {
     await clearOpen();
   }
 
+  /// 删除一条记录（按 start 匹配）。
+  ///
+  /// 用 start 而非对象相等做键：同一个 start 唯一确定一条记录，而
+  /// GapInterval 没有实现 ==，直接 remove 会失效。
+  Future<void> remove(GapInterval gap) async {
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getStringList(_key) ?? <String>[];
+    final kept = <String>[];
+    for (final s in raw) {
+      final g = GapInterval.fromJson(jsonDecode(s));
+      if (g != null && g.start == gap.start) continue; // 命中要删的那条
+      kept.add(s);
+    }
+    await sp.setStringList(_key, kept);
+  }
+
+  /// 替换一条记录为 [updated]（按 start 匹配）。
+  Future<void> update(GapInterval updated) async {
+    final sp = await SharedPreferences.getInstance();
+    final raw = sp.getStringList(_key) ?? <String>[];
+    final out = <String>[];
+    var replaced = false;
+    for (final s in raw) {
+      final g = GapInterval.fromJson(jsonDecode(s));
+      if (g != null && g.start == updated.start) {
+        out.add(jsonEncode(updated.toJson()));
+        replaced = true;
+      } else {
+        out.add(s);
+      }
+    }
+    // 没找到就当作新增，避免用户改标签时记录凭空消失。
+    if (!replaced) out.add(jsonEncode(updated.toJson()));
+    await sp.setStringList(_key, out);
+  }
+
   /// 统计今天未被计入学习时间的空档总时长。
   Future<Duration> todayGapDuration() async {
     final entries = await todayEntries();

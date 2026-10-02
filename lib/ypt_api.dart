@@ -168,10 +168,16 @@ class YptApi {
 
   /// GET /logs/v2/day?date= — 위와 같은 데이터를 v2 엔드포인트에서 시도.
   ///
-  /// 실측(2026-10-02) 결과:이 엔드포인트는 존재하며 404 가 아니라
-  /// `{"s":false,"c":"108"}` 로 응답한다(존재하지만 토큰 무효).
-  /// 즉/ logs/day 의 v2 변형이 확실히 있다. v2 필드 구조가 다를 수 있으므로
-  /// 파싱 실패 시 v1 으로 폴백한다.
+  /// 2026-10-02 실측 + RE(libapp.so v810.0.85)결과:
+  ///  - 이 경로는 **서버에는 존재**(404 아닌 200 + `{"s":false,"c":"108"}`)
+  ///  - 그러나 공식 클라이언트의 문자열 테이블에는 **등장하지 않는다**
+  ///  →遗留 엔드포인트로 보인다. 필드 구조가 v1 과 다를 수 있으므로
+  ///    최후의 폴백으로만 쓴다.
+  ///
+  /// 공식 클라이언트가 실제로 쓰는 확정 엔드포인트는:
+  ///   GET /logs/day?date=       단일 날짜
+  ///   GET /logs/range/days      기간 범위(히트맵 批量 조회에 적합)
+  ///   GET /logs/calendar/home   달력 요약
   Future<SubjectTimeSnapshot> dayLogSubjectsV2(String date) async {
     final r = await _get('/logs/v2/day?date=$date');
     if (r.statusCode == 403) {
@@ -181,16 +187,16 @@ class YptApi {
     return _parseDayLogSnapshot(_decodeObject(r));
   }
 
-  /// v2 우선, 실패하면 v1 로 폴백.
+  /// 공식 엔드포인트(/logs/day) 우선, 실패하면遗留 v2 로 폴백.
   Future<SubjectTimeSnapshot> dayLogSubjectsAuto(String date) async {
     try {
-      return await dayLogSubjectsV2(date);
+      return await dayLogSubjects(date);
     } catch (e) {
       if (e is YptAuthException) rethrow; // 인증 문제면 폴백해도 소용없다
       try {
-        return await dayLogSubjects(date);
+        return await dayLogSubjectsV2(date);
       } catch (_) {
-        rethrow; // v1 도 실패 → 진짜 오류
+        rethrow; // 둘 다 실패 → 진짜 오류
       }
     }
   }
@@ -289,6 +295,258 @@ class YptApi {
       return DayLog.fromJson(j['dl']);
     }
     throw YptApiException(j['c']?.toString() ?? 'study/stop failed');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 休息记录(rest) — 官方客户端存在完整的"停止计时后询问这段时间在做什么"
+  // 功能。端点与字段名由官方 APK(libapp.so, v810.0.85)逆向确认,并已实测
+  // 这些端点在生产服务上返回 200(鉴权拦截),不是 404。
+  //
+  // UI 流程由 i18n key 还原:
+  //   study_dialog_rest_title → study_dialog_rest_record
+  //   → study_dialog_rest_edit_tag / study_dialog_rest_skip
+  //   标签选择:study_break_tag_selection / select_break_tag_msg
+  //   标签不存在:study_break_tag_not_exist_alert
+  //   离线别名:alert_stop_study_just_now_record(即停止后立即询问)
+  // ─────────────────────────────────────────────────────────────
+
+  /// POST /rest/record — 登记一条休息记录。
+  ///
+  /// 字段名从二进制中确认存在:`tag` / `startedAt` / `endedAt` / `minutes`。
+  /// 语义:`startedAt`=休息开始(即上次停止计时的时刻),`endedAt`=休息结束
+  /// (即本次开始计时的时刻)。手机版在停止后立即弹窗,所以这两个值在
+  /// 弹窗那一刻都已确定(endedAt 取弹窗确认的时刻)。
+  ///
+  /// [tag] 传 null 表示只登记时长、不做归类(对应「先不填标签」)。
+  Future<void> recordRest({
+    required int startedAtMs,
+    required int endedAtMs,
+    String? tag,
+  }) async {
+    final r = await _post('/rest/record', {
+      'startedAt': startedAtMs,
+      'endedAt': endedAtMs,
+      'minutes': (endedAtMs - startedAtMs) ~/ 60000,
+      if (tag != null) 'tag': tag,
+      'deviceModel': deviceModel,
+    });
+    _ensureOk(r, 'rest/record');
+    final j = _decodeObject(r);
+    if (j['s'] != true) {
+      throw YptApiException(j['c']?.toString() ?? 'rest/record failed');
+    }
+  }
+
+  /// POST /rest/add — 补记一条休息记录(用于历史补录场景)。
+  Future<void> addRest({
+    required int startedAtMs,
+    required int endedAtMs,
+    String? tag,
+  }) async {
+    final r = await _post('/rest/add', {
+      'startedAt': startedAtMs,
+      'endedAt': endedAtMs,
+      'minutes': (endedAtMs - startedAtMs) ~/ 60000,
+      if (tag != null) 'tag': tag,
+      'deviceModel': deviceModel,
+    });
+    _ensureOk(r, 'rest/add');
+    final j = _decodeObject(r);
+    if (j['s'] != true) {
+      throw YptApiException(j['c']?.toString() ?? 'rest/add failed');
+    }
+  }
+
+  /// POST /rest/edit — 修改已登记的休息记录。
+  Future<void> editRest({
+    required int startedAtMs,
+    int? endedAtMs,
+    String? tag,
+  }) async {
+    final r = await _post('/rest/edit', {
+      'startedAt': startedAtMs,
+      if (endedAtMs != null) 'endedAt': endedAtMs,
+      if (tag != null) 'tag': tag,
+      'deviceModel': deviceModel,
+    });
+    _ensureOk(r, 'rest/edit');
+    final j = _decodeObject(r);
+    if (j['s'] != true) {
+      throw YptApiException(j['c']?.toString() ?? 'rest/edit failed');
+    }
+  }
+
+  /// POST /rest/delete — 删除一条休息记录。
+  Future<void> deleteRest({required int startedAtMs}) async {
+    final r = await _post('/rest/delete', {
+      'startedAt': startedAtMs,
+      'deviceModel': deviceModel,
+    });
+    _ensureOk(r, 'rest/delete');
+    final j = _decodeObject(r);
+    if (j['s'] != true) {
+      throw YptApiException(j['c']?.toString() ?? 'rest/delete failed');
+    }
+  }
+
+  /// POST /rest/tags/edit — 修改休息记录的标签。
+  ///
+  /// 官方客户端把标签做成可编辑(`study_rest_tag_title`、
+  /// `study_rest_tag_dialog_title` 等 i18n key 表明标签是用户自定义的),
+  /// 所以标签集合应当从服务端拉取而非本地硬编码。
+  Future<void> editRestTag({
+    String? original,
+    required String tag,
+  }) async {
+    final r = await _post('/rest/tags/edit', {
+      if (original != null) 'original': original,
+      'tag': tag,
+      'deviceModel': deviceModel,
+    });
+    _ensureOk(r, 'rest/tags/edit');
+    final j = _decodeObject(r);
+    if (j['s'] != true) {
+      throw YptApiException(j['c']?.toString() ?? 'rest/tags/edit failed');
+    }
+  }
+
+  /// POST /study/sync-offline-data — 离线记录的补传。
+  ///
+  /// 官方支持离线记录(存在 `OFFLINE_POMODORO_START_LOG` /
+  /// `OFFLINE_POMODORO_STOP_LOG` 等持久化 key 与
+  /// `study/sync-offline-data` 端点)。本客户端目前不做离线记录,
+  /// 保留此方法以备将来实现时使用。
+  Future<void> syncOfflineData(Map<String, Object?> payload) async {
+    final r = await _post('/study/sync-offline-data', payload);
+    _ensureOk(r, 'study/sync-offline-data');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 히트맵용 批量 조회 — RE 로 확인된 공식 엔드포인트.
+  //
+  // 앞의 dayLogSubjectsAuto 는 날짜마다 1 회씩 호출하므로 90 일이면 90 회다.
+  // 공식 클라이언트에게는 /logs/range/days(기간 범위)와
+  // /logs/calendar/home(달력 요약)이 있으므로, 히트맵은 이쪽을 쓰는 게
+  // 훨씬 적다. 응답 구조는 미확인이라 관용적 파서를 쓴다.
+  // ─────────────────────────────────────────────────────────────
+
+  /// GET /logs/calendar/home — 달력 요약. 히트맵에 한 번의 요청으로 충분할
+  /// 가능성 높음(파라미터 없음).
+  ///
+  /// 응답 필드 구조는 RE 로 확정할 수 없다(문자열 테이블에 필드명이 없음).
+  /// 그래서 [CalendarPoint] 목록으로 관용 파싱하고, 못 읽으면 빈 리스트를
+  /// 돌려준다(호출부가 폴백 처리).
+  Future<List<CalendarPoint>> calendarHome() async {
+    final r = await _get('/logs/calendar/home');
+    if (r.statusCode == 403) {
+      throw const YptAuthException('session expired');
+    }
+    if (r.statusCode != 200) return const [];
+    final j = _decodeObject(r);
+    return parseCalendarPoints(j);
+  }
+
+  /// GET /logs/range/days — 기간 범위 조회.
+  Future<List<CalendarPoint>> rangeDays(
+    String startDate,
+    String endDate, {
+    String? groupId,
+  }) async {
+    final q = StringBuffer('/logs/range/days?start=$startDate&end=$endDate');
+    if (groupId != null) q.write('&groupID=$groupId');
+    final r = await _get(q.toString());
+    if (r.statusCode == 403) {
+      throw const YptAuthException('session expired');
+    }
+    if (r.statusCode != 200) return const [];
+    return parseCalendarPoints(_decodeObject(r));
+  }
+
+  /// 달력/범위 응답의 관용 파서.
+  ///
+  /// 이 엔드포인트들의 응답은 미확인이라, "날짜로 보이는 키 + ms로 보이는 값"
+  /// 을 아무 데서나 찾아낸다. `date`/`dt`/`d` 키를 날짜로, `sm`/`ms`/`studyMs`
+  /// 를 시간(ms)으로 인식한다. 못 찾으면 빈 리스트.
+  ///
+  /// 정답을 보장하는 파서가 아니라 "대부분의 형태를 커버"하는 파서다. 그래서
+  /// 호출부는 반드시 폴백 경로를 함께 둔다.
+  static List<CalendarPoint> parseCalendarPoints(Map<String, dynamic> json) {
+    final out = <CalendarPoint>[];
+
+    // 후보 컨테이너: 응답 전체, 그리고 배열 필드들.
+    final containers = <Map<String, dynamic>>[json];
+    for (final v in json.values) {
+      if (v is List) {
+        for (final item in v) {
+          if (item is Map) containers.add(item.cast<String, dynamic>());
+        }
+      }
+    }
+
+    final seen = <String>{};
+    for (final c in containers) {
+      for (final entry in c.entries) {
+        final key = entry.key.toLowerCase();
+        // 날짜를 찾는 형태는 두 가지다:
+        //   (a) 키가 date/dt/d/day 이고 값이 날짜 문자열
+        //   (b) 키 그 자체가 날짜 문자열 (인라인 맵 {'2026-10-01': 7200000})
+        // (b) 를漏하면 응답 형태 하나를 통째로 못 읽는다.
+        final namedDateKey =
+            key == 'date' || key == 'dt' || key == 'd' || key == 'day';
+        final inlineDateKey =
+            !namedDateKey && _parseLooseDate(entry.key) != null;
+        if (!namedDateKey && !inlineDateKey) continue;
+
+        // (a) 는 값에서 날짜를 뽑고, (b) 는 키가 곧 날짜다.
+        final date = namedDateKey
+            ? _parseLooseDate(entry.value)
+            : _parseLooseDate(entry.key);
+        if (date == null) continue;
+
+        var ms = 0;
+        if (inlineDateKey) {
+          // 인라인 형태에서는 키에 대응하는 값이 곧 밀리초다.
+          if (entry.value is num) ms = (entry.value as num).toInt();
+        } else {
+          // 같은 컨테이너에서 시간 값을 찾는다.
+          for (final probe
+              in ['sm', 'ms', 'studyMs', 'studyms', 'time', 'total']) {
+            final v2 = c[probe];
+            if (v2 is num) {
+              ms = v2.toInt();
+              break;
+            }
+          }
+          // 값 자체가 ms 라면(길이 1인 폴백)도 처리.
+          if (ms == 0 && entry.value is num) {
+            ms = (entry.value as num).toInt();
+          }
+        }
+        if (ms < 0) continue;
+        if (seen.add(date)) out.add(CalendarPoint(date: date, studyMs: ms));
+      }
+    }
+    return out;
+  }
+
+  /// 'YYYY-MM-DD' / 'YYYYMMDD' / ISO8601 등 관용 파싱.
+  ///
+  /// epoch 를 날짜로 바꿀 때는 반드시 KST(UTC+9) 기준이어야 한다. YPT 서버의
+  /// `dt` 는 한국 시간이고, 로컬 타임존으로 변환하면 자정 근처에서 하루가
+  /// 어긋난다. (실측: 1700000000000 은 UTC 로는 11-14, KST 로는 11-15.)
+  static String? _parseLooseDate(Object? value) {
+    if (value is int) {
+      final ms = value > 9999999999 ? value : value * 1000;
+      final d = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true)
+          .add(const Duration(hours: 9));
+      return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    }
+    if (value is! String) return null;
+    final s = value.trim();
+    if (s.isEmpty) return null;
+    final m = RegExp(r'^(\d{4})-?(\d{2})-?(\d{2})').firstMatch(s);
+    if (m == null) return null;
+    return '${m.group(1)}-${m.group(2)}-${m.group(3)}';
   }
 }
 
