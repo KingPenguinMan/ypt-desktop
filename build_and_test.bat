@@ -33,12 +33,15 @@ if not exist "%FLUTTER%" (
     pause
     exit /b 1
 )
-"%FLUTTER%" --version
+REM NOTE: every invocation of flutter.bat must be prefixed with `call`.
+REM flutter.bat is itself a batch file; without `call` the control flow
+REM does NOT return here — the outer script silently stops after step 0.
+call "%FLUTTER%" --version
 echo.
 
 REM ---------- 1. deps ----------
 echo [1/7] Fetching dependencies...
-"%FLUTTER%" pub get
+call "%FLUTTER%" pub get
 if errorlevel 1 (
     echo   [ERROR] pub get failed.
     pause
@@ -48,24 +51,23 @@ echo.
 
 REM ---------- 1b. native toolchain check ----------
 echo [1b/7] Checking native toolchain for cnativeapi...
-"%FLUTTER%" doctor -v 2>&1 | findstr /i "Visual Studio" > "%TEMP%\ypt_vs.txt"
+call "%FLUTTER%" doctor -v 2>&1 | findstr /i "Visual Studio" > "%TEMP%\ypt_vs.txt"
 type "%TEMP%\ypt_vs.txt"
 findstr /i "Visual Studio" "%TEMP%\ypt_vs.txt" >nul
 if errorlevel 1 (
     echo   [WARN] Visual Studio not detected by flutter doctor.
-    echo   tray_manager pulls in nativeapi -> cnativeapi, which ships C++
+    echo   tray_manager pulls in nativeapi -^> cnativeapi, which ships C++
     echo   sources and may compile them at build time. Without the C++
     echo   toolchain the build is likely to fail.
-    echo   Install: Visual Studio 2022 with the "Desktop development
-    echo   with C++" workload, then run this script again.
+    echo   Do NOT install anything yet. Continue and see whether
+    echo   step 4 actually fails, then install if needed.
     echo.
-    pause
 )
 echo.
 
 REM ---------- 2. analyze ----------
 echo [2/7] Static analysis (flutter analyze)...
-"%FLUTTER%" analyze
+call "%FLUTTER%" analyze
 if errorlevel 1 (
     echo.
     echo   [WARN] analyze reported problems. Save the output above.
@@ -97,9 +99,17 @@ echo.
 
 REM ---------- 4. build ----------
 echo [4/7] Building Windows release...
-"%FLUTTER%" build windows --release
+echo   (first build may take several minutes: cnativeapi compiles C++)
+call "%FLUTTER%" build windows --release
 if errorlevel 1 (
+    echo.
     echo   [ERROR] build failed.
+    echo   If the error mentions cnativeapi / C++ / cl.exe / CMake,
+    echo   then the Visual Studio C++ toolchain is required:
+    echo     Visual Studio Installer -^> Modify -^> "Desktop development
+    echo     with C++" workload.
+    echo   Otherwise save the full output above.
+    echo.
     pause
     exit /b 1
 )
