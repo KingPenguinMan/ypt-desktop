@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+//
 // Dart 源码静态自检 —— 补足本环境跑不了 `dart analyze` 的盲区。
 //
 // 为什么需要它：当前沙箱无法创建子进程，`dart analyze`（需 fork
@@ -28,7 +30,9 @@ String strip(String src) {
     final c = src[i];
     // 行注释
     if (c == '/' && i + 1 < src.length && src[i + 1] == '/') {
-      while (i < src.length && src[i] != '\n') i++;
+      while (i < src.length && src[i] != '\n') {
+        i++;
+      }
       continue;
     }
     // 块注释
