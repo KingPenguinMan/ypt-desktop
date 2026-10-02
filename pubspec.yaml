@@ -1,4 +1,4 @@
-name: ypt-desktop
+name: ypt_client
 description: YPT(열품타) PC 클라이언트 — 비공식 데스크톱 클라 (본인 계정 interop)
 publish_to: 'none'
 version: 0.5.1
