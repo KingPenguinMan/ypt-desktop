@@ -1,0 +1,37 @@
+# 换行符规则
+#
+# Windows 批处理与 PowerShell 脚本**必须**用 CRLF。
+# 用 LF 时 cmd.exe 逐行解析会错位，症状是每行开头被吃掉几个字符：
+#   REM      -> 'M' 不是内部或外部命令
+#   setlocal -> 'etlocal' 不是内部或外部命令
+#   cd /d    -> '/d' 不是内部或外部命令
+# 很难一眼看出根因，所以在这里固定住。
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 默认按文本处理，检出时统一转换
+* text=auto
+
+# 二进制资源不做换行转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.so   binary
+*.dll  binary
+*.exe  binary
+*.zip  binary
+*.gz   binary
+*.tar  binary
+*.xapk binary
+*.apk  binary
+
+# Dart 源码用 LF（Flutter 工具链的惯例）
+*.dart text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf

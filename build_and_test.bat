@@ -1,4 +1,14 @@
 @echo off
+REM ------------------------------------------------------------
+REM  THIS FILE MUST USE CRLF LINE ENDINGS.
+REM  With LF, cmd.exe mis-parses every line and eats the first few
+REM  characters, producing errors like:
+REM      'M' is not recognized      (should be REM)
+REM      'etlocal' is not recognized (should be setlocal)
+REM  .gitattributes enforces this; keep the file checked out as-is.
+REM  Keep this file pure ASCII too: the console may be GBK (CP936).
+REM ------------------------------------------------------------
+
 REM ============================================================
 REM  ypt_client - build and test script
 REM
@@ -35,7 +45,7 @@ if not exist "%FLUTTER%" (
 )
 REM NOTE: every invocation of flutter.bat must be prefixed with `call`.
 REM flutter.bat is itself a batch file; without `call` the control flow
-REM does NOT return here — the outer script silently stops after step 0.
+REM does NOT return here -- the outer script silently stops after step 0.
 call "%FLUTTER%" --version
 echo.
 
@@ -105,9 +115,9 @@ if errorlevel 1 (
     echo.
     echo   [ERROR] build failed.
     echo   If the error mentions cnativeapi / C++ / cl.exe / CMake,
-    echo   then the Visual Studio C++ toolchain is required:
-    echo     Visual Studio Installer -^> Modify -^> "Desktop development
-    echo     with C++" workload.
+    echo   then the Visual Studio C++ toolchain is required.
+    echo   Open Visual Studio Installer, click Modify, and enable
+    echo   the workload "Desktop development with C++".
     echo   Otherwise save the full output above.
     echo.
     pause
