@@ -7,6 +7,7 @@
 //
 // 运行: dart run tool/selftest.dart
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 
 int _pass = 0;
@@ -277,6 +278,48 @@ void main() {
       longEnough(const Duration(seconds: 60)));
   check('61 秒 -> 记录', longEnough(const Duration(seconds: 61)));
   check('1 小时 -> 记录', longEnough(const Duration(hours: 1)));
+
+  print('\n=== 扇形图命中测试的角度约定 ===');
+  // 镜像 lib/screens/subject_pie_chart.dart 的 _hitTest 角度累加部分。
+  // 只验证"角度 -> 扇区下标"的映射，不涉及半径（半径判断很直白）。
+  //
+  // 之所以要测：绘制和命中必须用同一套角度约定（12 点方向起、顺时针）。
+  // 一旦有一处写成逆时针或从 3 点起，图上看着对、鼠标却指着别的扇区，
+  // 而且不会有任何报错——这类偏差只能靠测试挡住。
+  int sliceAt(double degFromTop, List<double> values) {
+    final total = values.fold<double>(0, (a, b) => a + b);
+    if (total <= 0 || values.isEmpty) return -1;
+    var ang = degFromTop * math.pi / 180;
+    var acc = 0.0;
+    for (var i = 0; i < values.length; i++) {
+      acc += values[i] / total * 2 * math.pi;
+      if (ang < acc) return i;
+    }
+    return values.length - 1;
+  }
+
+  // 75% / 25% 两块：第一块覆盖 0..270 度，第二块 270..360
+  final two = <double>[75, 25];
+  check('12 点方向 -> 第 0 块', sliceAt(0, two) == 0);
+  check('3 点方向(90度) -> 第 0 块', sliceAt(90, two) == 0);
+  check('6 点方向(180度) -> 第 0 块', sliceAt(180, two) == 0);
+  check('快到边界(269度) -> 第 0 块', sliceAt(269, two) == 0);
+  check('刚过边界(271度) -> 第 1 块', sliceAt(271, two) == 1);
+  check('11 点方向(330度) -> 第 1 块', sliceAt(330, two) == 1);
+
+  // 等分三块：0..120 / 120..240 / 240..360
+  final three = <double>[1, 1, 1];
+  check('三等分 0 度 -> 第 0 块', sliceAt(0, three) == 0);
+  check('三等分 119 度 -> 第 0 块', sliceAt(119, three) == 0);
+  check('三等分 121 度 -> 第 1 块', sliceAt(121, three) == 1);
+  check('三等分 239 度 -> 第 1 块', sliceAt(239, three) == 1);
+  check('三等分 241 度 -> 第 2 块', sliceAt(241, three) == 2);
+  check('三等分 359 度 -> 第 2 块', sliceAt(359, three) == 2);
+
+  // 边界与退化输入
+  check('总和为 0 -> -1（不越界）', sliceAt(10, <double>[0, 0]) == -1);
+  check('空列表 -> -1', sliceAt(10, <double>[]) == -1);
+  check('单块 360 度全覆盖', sliceAt(200, <double>[10]) == 0);
 
   print('\n=== 结果 ===');
   print('  passed: $_pass   failed: $_fail');
