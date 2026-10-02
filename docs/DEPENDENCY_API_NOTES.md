@@ -272,3 +272,96 @@ cnativeapi/pubspec     ← ffiPlugin: true，无 build hook，无预编译产物
 4. 点了托盘没反应 → 检查闭包是否被 GC（本项目用 `_menuListeners` 持有引用）
 5. 托盘菜单不刷新 → 每次增删菜单项后必须重调 `setContextMenu`
 
+
+---
+
+## 构建陷阱：MSVC 源代码编码（C2220 / C4819）
+
+### 症状
+
+```
+windows/runner/social_webview.h(1,1): error C2220: 警告被视为错误
+windows/runner/social_webview.h(1,1): warning C4819:
+    该文件包含不能在当前代码页(936)中表示的字符
+```
+
+构建跑了一百多秒、`cnativeapi` 都编译成功了，最后倒在这里 —— 容易被误判成
+"工具链没装好"。
+
+### 根因链
+
+```
+原作者的 .h/.cpp 是 UTF-8 无 BOM，含韩文注释
+        ↓
+MSVC 未指定 /utf-8 时按【系统代码页】解析源文件
+        ↓
+中文 Windows = CP936(GBK)，很多 UTF-8 字节序列在 GBK 下非法
+        ↓
+warning C4819
+        ↓
+windows/CMakeLists.txt:42 有 /W4 /WX —— 警告视为错误
+        ↓
+error C2220
+```
+
+### 为什么原作者和 CI 都没事
+
+**CP1252（英文/西文 locale）几乎定义了 0x80–0xFF 的全部字节值。**
+同样的 UTF-8 韩文在 CP1252 下只会被解析成乱码，**不触发 C4819**。
+英文 region 的机器和 GitHub Actions runner 都是 CP1252，
+所以作者的构建一直正常；换到中文 Windows（CP936）就必然失败。
+
+**这不是本项目引入的问题，是原仓库的既有缺陷。**
+
+### 修法
+
+`windows/runner/CMakeLists.txt`：
+
+```cmake
+target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
+```
+
+**加在这里而不是 `apply_standard_settings()`**：那个函数被
+`flutter_wrapper_plugin` 和 `flutter_wrapper_app` 共用，且它自身的注释
+明确写着"不要为插件改这个函数"。
+
+### 安全性核实
+
+判断 `/utf-8` 会不会改变行为，关键看非 ASCII 出现在哪：
+
+| 位置 | /utf-8 的影响 |
+|---|---|
+| 注释 | 无影响（只是正确解码） |
+| 字符串字面量 | **会改变**（执行字符集也变成 UTF-8） |
+
+本项目实测：
+
+```
+windows/runner/social_webview.h    非 ASCII 4 行，全在注释
+windows/runner/social_webview.cpp  非 ASCII 6 行，全在注释
+   字符串字面量里的非 ASCII：0 处
+```
+
+**零个字符串字面量含非 ASCII ⇒ `/utf-8` 只改变读取方式，行为不变。**
+
+### 自查命令
+
+```bash
+python -c "
+import os,re,io
+exts=('.cpp','.h','.cc','.c','.rc')
+for root,_,fs in os.walk('windows'):
+    for fn in fs:
+        if not fn.endswith(exts): continue
+        p=os.path.join(root,fn); d=open(p,'rb').read()
+        n=sum(1 for b in d if b>127)
+        if n: print(f'{n:>5} 非ASCII  BOM={d[:3]==bytes([0xEF,0xBB,0xBF])}  {p}')"
+```
+
+若新增的源文件带非 ASCII 且不在注释里，要么去掉，要么确认 `/utf-8`
+对执行字符集的影响可接受。
+
+### 另一种修法（未采用）
+
+给源文件加 UTF-8 BOM。MSVC 用 BOM 自动识别编码，不必改 CMake。
+没选它是因为要改动原作者的两个源文件，而改 CMake 不动源码。
