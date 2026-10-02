@@ -17,7 +17,7 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# WebView2 SDK (NuGet) — 소셜 로그인 인터셉터용 임베디드 브라우저
+# WebView2 SDK (NuGet) -- 소셜 로그인 인터셉터용 임베디드 브라우저
 include(FetchContent)
 FetchContent_Declare(webview2
   URL "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51"
@@ -27,6 +27,24 @@ FetchContent_MakeAvailable(webview2)
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+
+# Source charset: the runner sources are UTF-8 (they carry Korean comments),
+# but MSVC defaults to the system code page -- 936 (GBK) on Chinese Windows.
+# It then reports
+#     warning C4819: file contains a character that cannot be represented
+#                   in the current code page
+# and because apply_standard_settings enables /WX (warnings as errors), that
+# warning escalates to
+#     error C2220: warning treated as error - no 'object' file generated
+#
+# /utf-8 tells MSVC the sources are UTF-8. It only changes how the files are
+# decoded; no narrow string literal in this target contains non-ASCII, so the
+# execution charset (which /utf-8 also sets) does not alter any behaviour.
+#
+# Added here rather than inside apply_standard_settings(): that function is
+# shared with the flutter_wrapper targets and its own comment says not to
+# change it for plugin-facing reasons.
+target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
@@ -44,7 +62,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# WebView2 헤더/로더 (정적 로더 링크 — 런타임은 시스템 WebView2 Runtime 사용)
+# WebView2 헤더/로더 (정적 로더 링크 -- 런타임은 시스템 WebView2 Runtime 사용)
 target_include_directories(${BINARY_NAME} PRIVATE
   "${webview2_SOURCE_DIR}/build/native/include")
 target_link_libraries(${BINARY_NAME} PRIVATE

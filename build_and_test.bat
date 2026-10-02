@@ -66,11 +66,11 @@ type "%TEMP%\ypt_vs.txt"
 findstr /i "Visual Studio" "%TEMP%\ypt_vs.txt" >nul
 if errorlevel 1 (
     echo   [WARN] Visual Studio not detected by flutter doctor.
-    echo   tray_manager pulls in nativeapi -^> cnativeapi, which ships C++
-    echo   sources and may compile them at build time. Without the C++
-    echo   toolchain the build is likely to fail.
-    echo   Do NOT install anything yet. Continue and see whether
-    echo   step 4 actually fails, then install if needed.
+    echo   nativeapi depends on cnativeapi, which ships C++ sources and
+    echo   compiles them at build time. Without the C++ toolchain the
+    echo   build is likely to fail.
+    echo   Do NOT install anything yet: continue, and only install the
+    echo   workload if step 4 actually fails.
     echo.
 )
 echo.
@@ -90,7 +90,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo   analyze passed ^(no errors^).
+echo   analyze passed, no errors.
 echo.
 
 REM ---------- 3. logic tests ----------
@@ -117,12 +117,20 @@ echo   (first build may take several minutes: cnativeapi compiles C++)
 call "%FLUTTER%" build windows --release
 if errorlevel 1 (
     echo.
-    echo   [ERROR] build failed.
-    echo   If the error mentions cnativeapi / C++ / cl.exe / CMake,
-    echo   then the Visual Studio C++ toolchain is required.
-    echo   Open Visual Studio Installer, click Modify, and enable
-    echo   the workload "Desktop development with C++".
-    echo   Otherwise save the full output above.
+    echo   [ERROR] build failed. Match the message against this list:
+    echo.
+    echo   * error C2220 / warning C4819 : SOURCE ENCODING, not a missing
+    echo     toolchain. The runner sources are UTF-8 with non-ASCII comments;
+    echo     MSVC reads them as the system code page 936/GBK on Chinese
+    echo     Windows, and /WX turns the warning into an error.
+    echo     Already fixed in windows/runner/CMakeLists.txt via /utf-8.
+    echo     If it reappears, a newly added source file has non-ASCII bytes.
+    echo.
+    echo   * cnativeapi / cl.exe / CMake not found : the C++ toolchain.
+    echo     Open Visual Studio Installer, Modify, enable the workload
+    echo     "Desktop development with C++".
+    echo.
+    echo   * anything else : save the full output above.
     echo.
     pause
     exit /b 1
