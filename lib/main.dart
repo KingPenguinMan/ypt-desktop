@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_state.dart';
 import 'ca_setup.dart';
+import 'tray_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -10,6 +11,12 @@ const kBrand = Color(0xFFE8552D); // 주황빨강
 const kBg = Color(0xFF0D0D0F);
 const kCard = Color(0xFF18181B);
 const kCard2 = Color(0xFF222227);
+
+///托盘服务实例。由 [_YptAppState] 在启动时创建。
+///
+/// 之所以不放在 main() 里：托盘需要和 AppState 双向联动（状态变化时刷新
+/// 菜单，用户点菜单时操作 AppState），必须在 widget 树里有地方持有它。
+TrayService? _tray;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,8 +29,38 @@ Future<void> main() async {
   );
 }
 
-class YptApp extends StatelessWidget {
+class YptApp extends StatefulWidget {
   const YptApp({super.key});
+
+  @override
+  State<YptApp> createState() => _YptAppState();
+}
+
+class _YptAppState extends State<YptApp> {
+  @override
+  void initState() {
+    super.initState();
+    // 登录状态就绪后再建托盘——托盘菜单要用到 user/科目，登录前建没有内容。
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final app = context.read<AppState>();
+      if (!_trayReady) {
+        _trayReady = true;
+        final tray = TrayService(app);
+        await tray.init();
+        _tray = tray;
+        // AppState 每次 notify 都同步托盘菜单（状态行、开始/停止项、空档入口）。
+        app.addListener(tray.sync);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // AppState 是 Provider 创建的，会自行 dispose；这里只清理托盘。
+    _tray?.dispose();
+    _tray = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,3 +114,5 @@ class YptApp extends StatelessWidget {
     );
   }
 }
+
+bool _trayReady = false;

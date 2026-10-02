@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../models.dart';
+import '../main.dart' show kBrand;
 import 'timer_view.dart' show fmtMs;
 
 class StatsView extends StatefulWidget {
@@ -97,7 +98,24 @@ class _StatsViewState extends State<StatsView> {
               style: const TextStyle(fontWeight: FontWeight.bold)),
           Text('Top studiers in your category (not a group)',
               style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          // 주기 전환. API 가 이미 day/week/month 를 지원하는데 UI 에 고정돼
+          // 있었던 것을 드러낸 것.
+          Row(
+            children: [
+              for (final p in RankPeriod.values) ...[
+                _PeriodChip(
+                  label: p.label,
+                  selected: st.rankPeriod == p,
+                  onTap: st.statsLoading
+                      ? null
+                      : () => context.read<AppState>().setRankPeriod(p),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
           if (st.statsLoading)
             const Center(
                 child: Padding(
@@ -116,8 +134,8 @@ class _StatsViewState extends State<StatsView> {
             ),
             const SizedBox(height: 8),
             if (st.ranks.isNotEmpty)
-              const Text("Today's Top Studiers",
-                  style: TextStyle(color: Colors.grey, fontSize: 12)),
+              Text('${st.rankPeriod.label} · Top Studiers',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ...st.ranks.asMap().entries.map((e) => ListTile(
                   dense: true,
                   leading: CircleAvatar(
@@ -156,6 +174,49 @@ class _StatsViewState extends State<StatsView> {
                   fontWeight: FontWeight.bold,
                   fontFeatures: [FontFeature.tabularFigures()])),
         ],
+      ),
+    );
+  }
+}
+
+/// 랭킹 주기 선택 칩。
+class _PeriodChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _PeriodChip({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? kBrand.withValues(alpha: 0.18) : Colors.white10,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? kBrand : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              color: selected ? kBrand : Colors.grey[400],
+            ),
+          ),
+        ),
       ),
     );
   }

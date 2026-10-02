@@ -154,10 +154,52 @@ class YptApi {
 
   /// GET /logs/day?date= — 오늘 과목별 공부시간 (dayLog.ls).
   /// API 버전에 따라 과목 식별자가 제목 또는 id 계열 키로 내려올 수 있다.
+  ///
+  ///date 파라미터로 과거 날짜도 지정할 수 있다(달력 히트맵의 데이터 소스).
+  /// 형식은 `YYYY-MM-DD`. 응답 403은 인증 만료이므로 예외로 변환한다.
   Future<SubjectTimeSnapshot> dayLogSubjects(String date) async {
     final r = await _get('/logs/day?date=$date');
+    if (r.statusCode == 403) {
+      throw const YptAuthException('session expired');
+    }
     _ensureOk(r, 'logs/day');
-    final j = _decodeObject(r);
+    return _parseDayLogSnapshot(_decodeObject(r));
+  }
+
+  /// GET /logs/v2/day?date= — 위와 같은 데이터를 v2 엔드포인트에서 시도.
+  ///
+  /// 실측(2026-10-02) 결과:이 엔드포인트는 존재하며 404 가 아니라
+  /// `{"s":false,"c":"108"}` 로 응답한다(존재하지만 토큰 무효).
+  /// 즉/ logs/day 의 v2 변형이 확실히 있다. v2 필드 구조가 다를 수 있으므로
+  /// 파싱 실패 시 v1 으로 폴백한다.
+  Future<SubjectTimeSnapshot> dayLogSubjectsV2(String date) async {
+    final r = await _get('/logs/v2/day?date=$date');
+    if (r.statusCode == 403) {
+      throw const YptAuthException('session expired');
+    }
+    _ensureOk(r, 'logs/v2/day');
+    return _parseDayLogSnapshot(_decodeObject(r));
+  }
+
+  /// v2 우선, 실패하면 v1 로 폴백.
+  Future<SubjectTimeSnapshot> dayLogSubjectsAuto(String date) async {
+    try {
+      return await dayLogSubjectsV2(date);
+    } catch (e) {
+      if (e is YptAuthException) rethrow; // 인증 문제면 폴백해도 소용없다
+      try {
+        return await dayLogSubjects(date);
+      } catch (_) {
+        rethrow; // v1 도 실패 → 진짜 오류
+      }
+    }
+  }
+
+  /// /logs/day 계열 응답을 SubjectTimeSnapshot 으로 변환.
+  ///
+  /// 두 응답 위치(dl 안과 최상위)를 모두 합치는 이유:과목 식별자가 어느 한쪽에만
+  /// 내려오는 버전 차이가 관측되어 있다.
+  SubjectTimeSnapshot _parseDayLogSnapshot(Map<String, dynamic> j) {
     final dl = j['dl'];
     final subjectBooks = mapListValue(j['sbs']);
     final titleByIndex = <int, String>{};
@@ -256,6 +298,11 @@ class YptApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// 인증 만료(403/108). 재로그인이 필요한 상태.
+class YptAuthException extends YptApiException {
+  const YptAuthException(super.message);
 }
 
 /// 로그인 에러코드 → 사람이 읽을 메시지 (RE 스펙 에러카탈로그)

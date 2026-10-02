@@ -1,0 +1,326 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../app_state.dart';
+import '../gap_log.dart';
+import '../history_models.dart';
+import '../main.dart' show kBrand, kCard;
+import 'calendar_heatmap.dart';
+import 'subject_pie_chart.dart';
+
+/// 日历/热力图 + 扇形图。独立成页而非塞进 StatsView。
+///
+///为什么单独一页：这三块（热力图、扇形图、空档复盘）都属于"回顾"性质，
+/// 而 StatsView 是"今天的状态"。挤在一起会让今天的数据被历史淹没。
+class HistoryView extends StatefulWidget {
+  const HistoryView({super.key});
+
+  @override
+  State<HistoryView> createState() => _HistoryViewState();
+}
+
+class _HistoryViewState extends State<HistoryView> {
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final app = context.read<AppState>();
+      if (_loaded) return;
+      _loaded = true;
+      // 默认看最近 90 天。要更长可以调这个数，但注意是 N 次请求。
+      app.loadHistory(days: 90);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final st = context.watch<AppState>();
+    final today = DateTime.now();
+    final todayKey = formatDate(today);
+    final selected = st.selectedDate;
+
+    return RefreshIndicator(
+      onRefresh: () => st.loadHistory(days: 90),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              const Text('Activity history',
+                  style:
+                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (st.historyLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Last 90 days · tap a day for details',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          if (st.historyErrorText != null) ...[
+            Text(st.historyErrorText!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+            const SizedBox(height: 8),
+          ],
+
+          // ── 日历热力图 ──
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kCard,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CalendarHeatmap(
+                  data: st.history,
+                  today: today,
+                  selectedDate: selected,
+                  onSelect: (d) => st.selectDate(d),
+                ),
+                if (selected != null) ...[
+                  const SizedBox(height: 6),
+                  SelectedDayCard(
+                    date: selected,
+                    total: st.history[selected] ?? Duration.zero,
+                    byTitle: st.historySubjects[selected] ?? const {},
+                    onClose: () => st.selectDate(todayKey),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── 扇形图：今天各科目占比 ──
+          const Text('Today by subject',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kCard,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: SubjectPieChart(
+              data: buildBreakdown(
+                st.subjectTimes,
+                st.user?.subjects ?? const [],
+              ),
+              size: 170,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── 空档复盘 ──
+          const _GapSection(),
+        ],
+      ),
+    );
+  }
+}
+
+/// 空档自述记录列表。
+///
+/// 这是"记录不在计时的时间在做什么"的复盘入口。数据是纯本地的（服务端
+/// 没有对应端点，详见 ypt_api_probe_report.md）。
+class _GapSection extends StatefulWidget {
+  const _GapSection();
+
+  @override
+  State<_GapSection> createState() => _GapSectionState();
+}
+
+class _GapSectionState extends State<_GapSection> {
+  List<GapInterval> _entries = [];
+  Duration _total = Duration.zero;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final app = context.read<AppState>();
+    final entries = await app.gapEntries();
+    final total = await app.gapDuration();
+    if (!mounted) return;
+    setState(() {
+      _entries = entries;
+      _total = total;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('Untimed time',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            if (_total > Duration.zero)
+              Text('today ${_fmtDur(_total)}',
+                  style: const TextStyle(fontSize: 12, color: kBrand)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Gaps between study sessions, and what you said you were doing.',
+          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        if (_loading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (_entries.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: kCard,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.self_improvement,
+                    size: 22, color: Colors.grey[600]),
+                const SizedBox(height: 8),
+                const Text('No gaps recorded today',
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.grey[600])),
+                const SizedBox(height: 4),
+                const Text(
+                  'Stop the timer, wait a bit, then start again — you\'ll be asked what you did in between.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          for (final e in _entries.take(12))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _GapRow(entry: e),
+            ),
+          if (_entries.length > 12)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('…另有 ${_entries.length - 12} 条',
+                  style:
+                      const TextStyle(fontSize: 11, color: Colors.grey[600])),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _GapRow extends StatelessWidget {
+  final GapInterval entry;
+  const _GapRow({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final tag = entry.tag;
+    final activity = entry.activity ?? '';
+    final dur = entry.duration;
+    final start = entry.start;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: kCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          left: BorderSide(
+            color: tag == null ? Colors.grey[600]! : kBrand,
+            width: 2.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (tag != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: kBrand.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(tag,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: kBrand,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Text(
+                        activity.isEmpty ? '(未填写)' : activity,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: activity.isEmpty
+                              ? Colors.grey[600]
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${_hm(start)} · ${_fmtDur(dur)}',
+                  style:
+                      const TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _hm(DateTime d) =>
+    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+String _fmtDur(Duration d) {
+  final m = d.inMinutes;
+  if (m <= 0) return '0m';
+  if (m < 60) return '${m}m';
+  final h = m ~/ 60;
+  final rem = m % 60;
+  return rem == 0 ? '${h}h' : '${h}h ${rem}m';
+}
