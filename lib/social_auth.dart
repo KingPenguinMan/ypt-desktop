@@ -66,7 +66,7 @@ class SocialProvider {
 
   /// 카카오. keyHash는 안드로이드 SDK 전용이라 REST 흐름엔 불필요.
   ///
-  /// clientId 는 lib/social_credentials.dart 에서 온다(미추적 파일).
+  /// clientId 는 lib/social_credentials.dart 에서 온다(빌드 인자로 주입됨).
   /// redirect URI/Scheme 은 clientId 에서 파생되므로 함께 조립한다 —
   /// 값을 두 군데에 복사해두면 한쪽만 바뀌었을 때 조용히 깨진다.
   static const kakao = SocialProvider(

@@ -435,11 +435,14 @@ class AppState extends ChangeNotifier {
   /// 소셜 로그인 (Kakao/Naver): 시스템 브라우저 OAuth → YPT 교환 → jwt 저장.
   /// 반환: true=성공, false=실패/취소.
   Future<bool> socialLogin(SocialProvider provider) async {
-    // 凭证不在仓库里（见 lib/social_credentials.dart 的说明）。
-    // 未配置时直接给出可操作的错误，而不是发一个注定 401 的请求让用户猜。
+    // 凭证通过构建参数注入，仓库里不含任何值（见 lib/social_credentials.dart）。
+    // 未注入时直接给出可操作的错误，而不是发一个注定 401 的请求让用户猜。
     if (!SocialCredentials.isConfigured) {
-      errorText = '社交登录未配置：请复制 lib/social_credentials.example.dart '
-          '为 lib/social_credentials.dart 并填入 ${provider.name} 的凭证。';
+      errorText = '社交登录未配置。请在构建时注入 ${provider.name} 的凭证：'
+          'flutter build ... --dart-define=KAKAO_CLIENT_ID=... '
+          '--dart-define=NAVER_CLIENT_ID=... --dart-define=NAVER_CLIENT_SECRET=...'
+          '（Windows 用户可运行 build_and_test.bat，'
+          '它会读取 social_credentials.local.bat）';
       notifyListeners();
       return false;
     }

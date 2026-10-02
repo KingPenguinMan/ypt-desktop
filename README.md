@@ -54,15 +54,27 @@ macOS 桌面端，另附一个 Flutter Web 演示页和一个 Next.js 落地页�
 ## 凭证不在本仓库
 
 上游把 OAuth 的 `clientId` / `clientSecret` 硬编码在 `lib/social_auth.dart` 里。
-这些是**第三方服务的凭证**，不宜再分发，因此本仓库已将其移出：
+这些是**第三方服务的凭证**，不宜再分发，因此本仓库不再包含它们。
 
-| 文件 | 是否入库 | 用途 |
-|---|---|---|
-| `lib/social_credentials.dart` | **否**（已加入 `.gitignore`） | 存放真实凭证，仅存在于本地 |
-| `lib/social_credentials.example.dart` | 是 | 占位模板 |
+实现方式是**构建期注入**：`lib/social_credentials.dart` 里只有
+`String.fromEnvironment(...)`，本身不含任何值。这样既不会泄露，
+代码也始终能编译 —— 干净克隆直接可构建，无需先准备配置文件。
 
-首次构建前请复制模板并填入。若只用邮箱密码登录，可跳过此步 —— 应用照样能构建，
-只是点击社交登录时会提示「未配置」。
+填值的方式（三者其一）：
+
+```bash
+# 1) 行内传参
+flutter build linux --release \
+  --dart-define=KAKAO_CLIENT_ID=xxx \
+  --dart-define=NAVER_CLIENT_ID=xxx \
+  --dart-define=NAVER_CLIENT_SECRET=xxx
+
+# 2) Windows：用 build_and_test.bat，它会自动读取
+#    social_credentials.local.bat（该文件不入库，模板见
+#    social_credentials.local.bat.example）
+
+# 3) 不填 —— 应用照常构建和运行，只是社交登录提示「未配置」
+```
 
 > 需要说明：这些凭证在上游仓库中仍然公开存在，本仓库只是不再继续分发它们。
 
@@ -70,18 +82,10 @@ macOS 桌面端，另附一个 Flutter Web 演示页和一个 Next.js 落地页�
 
 ## 从源码构建
 
-### 1. 准备凭证（可选）
+### 1. 凭证（可选）
 
-```bash
-cp lib/social_credentials.example.dart lib/social_credentials.dart
-# 然后编辑 lib/social_credentials.dart，填入三个值
-```
-
-提交前确认该文件确实被忽略：
-
-```bash
-git check-ignore -v lib/social_credentials.dart
-```
+社交登录需要三个值，通过构建参数注入，仓库里不存它们 —— 见上一节。
+**跳过这一步项目照样能构建**，只是社交登录会提示「未配置」。
 
 ### 2. Linux 开发构建
 
@@ -148,8 +152,7 @@ lib/                       Flutter 应用源码
   gap_log.dart             空档记录（见「相对上游的增补」）
   tray_service.dart        托盘图标、菜单、窗口关闭行为
   app_log.dart             文件日志（发布版无控制台）
-  social_credentials.dart  第三方凭证 —— 不入库
-  social_credentials.example.dart   上述文件的模板
+  social_credentials.dart  第三方凭证 —— 仅读构建参数，文件本身无值
 
 tool/                      独立 Dart 脚本（不依赖 Flutter）
   selftest.dart            逻辑断言

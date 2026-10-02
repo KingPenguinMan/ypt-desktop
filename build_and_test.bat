@@ -146,10 +146,33 @@ if errorlevel 1 (
 )
 echo.
 
+REM ---------- 3c. local credentials ----------
+REM OAuth credentials are injected at build time and never stored in this
+REM repository (see lib/social_credentials.dart). Fill them in
+REM social_credentials.local.bat -- which is gitignored -- to enable
+REM social login. The build works without it; social login simply
+REM reports that it is not configured.
+echo [3c/8] Local credentials...
+set "KAKAO_CLIENT_ID="
+set "NAVER_CLIENT_ID="
+set "NAVER_CLIENT_SECRET="
+set "CRED_DEFINES="
+if exist "social_credentials.local.bat" call "social_credentials.local.bat"
+if not "%KAKAO_CLIENT_ID%"=="" set "CRED_DEFINES=%CRED_DEFINES% --dart-define=KAKAO_CLIENT_ID=%KAKAO_CLIENT_ID%"
+if not "%NAVER_CLIENT_ID%"=="" set "CRED_DEFINES=%CRED_DEFINES% --dart-define=NAVER_CLIENT_ID=%NAVER_CLIENT_ID%"
+if not "%NAVER_CLIENT_SECRET%"=="" set "CRED_DEFINES=%CRED_DEFINES% --dart-define=NAVER_CLIENT_SECRET=%NAVER_CLIENT_SECRET%"
+if "%CRED_DEFINES%"=="" (
+    echo   No local credentials. Social login will report unconfigured.
+    echo   To enable it: copy social_credentials.local.bat.example and fill it in.
+) else (
+    echo   Credentials loaded; passing them as --dart-define.
+)
+echo.
+
 REM ---------- 4. build ----------
 echo [4/8] Building Windows release...
 echo   (first build may take several minutes: cnativeapi compiles C++)
-call "%FLUTTER%" build windows --release
+call "%FLUTTER%" build windows --release%CRED_DEFINES%
 if errorlevel 1 (
     echo.
     echo   [ERROR] build failed. Match the message against this list:
