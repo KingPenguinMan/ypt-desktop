@@ -71,12 +71,16 @@ interface:
 
 ## Download From GitHub Releases
 
-Prebuilt desktop assets are attached to
-[GitHub Releases](https://github.com/deveworld/ypt_client/releases):
+Prebuilt desktop assets for **this fork** are attached to
+[GitHub Releases](https://github.com/KingPenguinMan/ypt-desktop/releases):
 
 - Linux x64 `.tar.gz` plus `.sha256`
 - Windows x64 `.zip` plus `.sha256`
 - macOS x64 `.zip` plus `.sha256`
+
+For the upstream project's own releases, see
+[deveworld/ypt_client/releases](https://github.com/deveworld/ypt_client/releases).
+The two are built from different code — pick whichever matches what you want.
 
 These are packaged Flutter build outputs. The current workflow does not sign or notarize installers.
 

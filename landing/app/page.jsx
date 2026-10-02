@@ -11,7 +11,7 @@ import LatestVersion from "./LatestVersion";
 import LocaleToggle from "./LocaleToggle";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-const repoUrl = process.env.NEXT_PUBLIC_REPOSITORY_URL || "https://github.com/deveworld/ypt_client";
+const repoUrl = process.env.NEXT_PUBLIC_REPOSITORY_URL || "https://github.com/KingPenguinMan/ypt-desktop";
 
 const text = {
   navFeatures: { en: "Features", ko: "기능" },

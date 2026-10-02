@@ -11,4 +11,4 @@ PRODUCT_NAME = YPT
 PRODUCT_BUNDLE_IDENTIFIER = com.deveworld.yptclient
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright (C) 2026 deveworld. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright (C) 2026 deveworld (original project); 2026 KingPenguinMan (fork). All rights reserved.
