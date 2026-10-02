@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show Size;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'app_log.dart';
 import 'app_state.dart';
 
 /// 托盘常驻服务。
@@ -49,6 +50,9 @@ class TrayService {
   /// 上一次构建菜单时的结构签名。相同则跳过重建。
   String? _menuSignature;
 
+  /// tickSync 出错是否已经报过一次（防止每秒刷屏）。
+  bool _tickErrorLogged = false;
+
   /// 挂到 nativeapi 事件循环上的回调必须保持引用，否则会被 GC 掉，
   /// 表现为"点了托盘没反应"。
   void Function(TrayIconEvent)? _trayListener;
@@ -62,12 +66,21 @@ class TrayService {
   }
 
   Future<void> init() async {
-    if (!isSupported || _ready) return;
+    AppLog.log('tray.init: enter (supported=$isSupported, ready=$_ready)');
+    if (!isSupported) {
+      AppLog.log('tray.init: 平台不支持托盘，跳过');
+      return;
+    }
+    if (_ready) {
+      AppLog.log('tray.init: 已初始化过，跳过');
+      return;
+    }
     try {
       // window_manager 没有 getOptions/setOptions——设置项是逐个方法
       // （setSize / setMinimumSize / setTitle ...），窗口选项只在
       // waitUntilReadyToShow 的参数里生效。所以最小尺寸用 setMinimumSize。
       await windowManager.ensureInitialized();
+      AppLog.step('ensureInitialized', 'ok');
       await windowManager.waitUntilReadyToShow(
         const WindowOptions(size: Size(440, 840), center: true),
         () async {
@@ -75,8 +88,10 @@ class TrayService {
           await windowManager.focus();
         },
       );
+      AppLog.step('waitUntilReadyToShow', 'ok');
       // 太小会让日历热力图和扇形图挤坏。
       await windowManager.setMinimumSize(const Size(400, 620));
+      AppLog.step('setMinimumSize', 'ok');
 
       // 先建托盘，**再**决定是否拦截关闭。
       //
@@ -88,15 +103,15 @@ class TrayService {
       if (_icon != null) {
         await windowManager.setPreventClose(true);
         windowManager.addListener(_WindowEvents(this));
+        AppLog.step('setPreventClose', 'true（关闭按钮改为隐藏到托盘）');
       } else {
         // 退化：关闭按钮就是退出。计时快照已落盘，下次启动会恢复。
-        debugPrint(
-          'tray unavailable — window close will quit the app normally',
-        );
+        AppLog.log('tray.init: 托盘不可用，关闭按钮保持"退出应用"行为');
       }
       _ready = true;
-    } catch (e) {
-      debugPrint('tray init failed: $e');
+      AppLog.log('tray.init: done (icon=${_icon != null}, ready=$_ready)');
+    } catch (e, st) {
+      AppLog.error('tray.init', e, st);
     }
   }
 
@@ -106,29 +121,57 @@ class TrayService {
   /// **所有可能抛异常的操作都在赋值 [_icon] 之前完成** —— 否则 setIcon
   /// 失败会留下"非空但不可用"的 _icon，让调用方误以为托盘正常。
   void _setupTray() {
+    AppLog.log('_setupTray: 开始');
     TrayIcon? icon;
     try {
       icon = TrayIcon.create();
+      AppLog.step('TrayIcon.create()', icon == null ? 'null' : 'ok');
       if (icon == null) {
-        debugPrint('TrayIcon.create() returned null — 系统可能不支持托盘');
+        AppLog.log('_setupTray: create() 返回 null —— 系统可能不支持托盘');
         return;
       }
-      // setIcon 在图片加载失败时会抛 ArgumentError（所有平台都是），
-      // 所以这里必须给一个真实存在的资源。该资源已随
-      // data/flutter_assets/assets/tray/tray_icon.png 打包。
-      icon.icon = ImageAsset.fromAsset('assets/tray/tray_icon.png');
+      // 设置图标。
+      //
+      // 这里有个隐蔽的失败模式：ImageAsset.fromAsset 和 Image.fromFile 都
+      // 返回**可空**值，它们在找不到文件时返回 null 而不抛异常。而
+      // `icon.icon = null` 不是报错，是「清空图标」—— 结果是托盘项存在但
+      // 完全看不见，用户既看不到图标也无从右键，且没有任何错误信息。
+      //
+      // 所以：先试资源文件，失败就用内嵌的 base64（一个 32x32 的橙圈时钟），
+      // 保证一定有图像可选，消除这一整类失败。
+      Image? img = ImageAsset.fromAsset('assets/tray/tray_icon.png');
+      AppLog.step('ImageAsset.fromAsset', img == null ? 'null' : 'ok');
+      if (img == null) {
+        AppLog.log('_setupTray: 资源文件未解析到，改用内嵌 base64 图标');
+        img = Image.fromBase64(kTrayIconPngBase64);
+        AppLog.step('Image.fromBase64 兜底', img == null ? 'null' : 'ok');
+      }
+      if (img == null) {
+        // 两条路都拿不到图像：宁可不显示托盘，也不要一个看不见的幽灵图标
+        // （后者会让用户以为程序坏了却查不出原因）。
+        AppLog.log('_setupTray: 无法获取托盘图像，放弃创建托盘');
+        try {
+          icon.dispose();
+        } catch (_) {}
+        return;
+      }
+      icon.icon = img;
+      AppLog.step('icon.icon 赋值', 'ok');
       icon.setTooltip('YPT - Yeolpumta');
+      AppLog.step('setTooltip', 'ok');
       _trayListener = (event) {
+        AppLog.log('tray 事件: ${event.runtimeType}');
         // Linux 不上报这些事件，面板自己弹菜单。
         if (Platform.isLinux) return;
         if (event is TrayIconClickedEvent) {
           _showWindow();
         }
       };
-      icon.addListener(_trayListener!);
-    } catch (e) {
+      final lid = icon.addListener(_trayListener!);
+      AppLog.step('addListener', 'ok (id=$lid)');
+    } catch (e, st) {
       // 失败就把 native handle 还回去，并保持 _icon 为 null。
-      debugPrint('tray setup failed: $e');
+      AppLog.error('_setupTray 中途失败', e, st);
       try {
         icon?.dispose();
       } catch (_) {}
@@ -136,8 +179,18 @@ class TrayService {
     }
     // 到这里说明前面所有易失败步骤都通过了，可以正式认领。
     _icon = icon;
-    _rebuildMenu(); // 先挂菜单
-    icon.setVisible(true); // 再显示
+    // 菜单构建必须容错：如果它抛异常，下面的 setVisible 就永远不执行，
+    // 结果是一个"创建成功但从不显示"的托盘图标 —— 正是"看不到图标"的
+    // 典型症状，而且完全不报错，极难定位。
+    try {
+      _rebuildMenu(); // 先挂菜单
+    } catch (e, st) {
+      AppLog.error('_rebuildMenu 失败（不影响图标显示）', e, st);
+    }
+    final visible = icon.setVisible(true); // 再显示
+    // setVisible 返回 bool —— 这是判断图标到底有没有显示出来的关键证据。
+    AppLog.step('setVisible(true)', visible);
+    AppLog.log('_setupTray: 完成 (可见=$visible)');
   }
 
   /// 菜单结构签名。结构没变就不重建整棵菜单。
@@ -172,7 +225,17 @@ class TrayService {
   /// 菜单每秒会创建大量 native 对象。
   void tickSync() {
     if (!_ready) return;
-    _updateStatusLabel();
+    try {
+      _updateStatusLabel();
+      _tickErrorLogged = false; // 恢复正常，允许下次再报
+    } catch (e, st) {
+      // 这个方法每秒被调用。若持续失败（比如 native handle 已释放），
+      // 不加限制会把日志刷爆，反而看不到真正有用的信息。
+      if (!_tickErrorLogged) {
+        _tickErrorLogged = true;
+        AppLog.error('tray.tickSync（后续同类错误不再重复记录）', e, st);
+      }
+    }
   }
 
   void _updateStatusLabel() {
@@ -183,16 +246,24 @@ class TrayService {
   }
 
   /// AppState 变化时调用，按需刷新菜单。
+  ///
+  /// 整体包了 try/catch：这个方法被注册到 ChangeNotifier 上，
+  /// 抛出的异常会直接污染 notifyListeners，让无关的界面更新也失败。
+  /// 托盘只是附加功能，它出问题不该影响主流程。
   void sync() {
     if (!_ready) return;
-    final sig = _structureSignature();
-    if (sig == _menuSignature) {
-      // 结构没变，但状态文字可能变了（比如刚停止计时）。
-      _updateStatusLabel();
-      return;
+    try {
+      final sig = _structureSignature();
+      if (sig == _menuSignature) {
+        // 结构没变，但状态文字可能变了（比如刚停止计时）。
+        _updateStatusLabel();
+        return;
+      }
+      _menuSignature = sig;
+      _rebuildMenu();
+    } catch (e, st) {
+      AppLog.error('tray.sync', e, st);
     }
-    _menuSignature = sig;
-    _rebuildMenu();
   }
 
   /// 重建托盘菜单。
@@ -287,6 +358,7 @@ class TrayService {
     }
 
     icon.setContextMenu(menu);
+    AppLog.step('setContextMenu', 'ok (项数见上)');
   }
 
   void _bindMenu(MenuItem item, void Function() action) {
@@ -323,8 +395,10 @@ class TrayService {
 
   /// 窗口关闭被拦截时调用：隐藏到托盘。
   void onWindowCloseAttempt() {
+    AppLog.log('窗口关闭事件: quitting=$_quitting, icon=${_icon != null}');
     if (_quitting) return;
     windowManager.hide();
+    AppLog.log('窗口已隐藏到托盘');
   }
 
   void dispose() {
@@ -360,3 +434,13 @@ String _hms(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '$h:${two(m)}:${two(s)}';
 }
+
+/// 内嵌的托盘图标（32x32 橙圈时钟，PNG）。
+///
+/// 用途：当 `assets/tray/tray_icon.png` 因打包或路径问题解析不到时的兜底。
+/// 关键点是 **不能把 null 赋给 icon.icon** —— 那是「清空图标」而非报错，
+/// 会产生一个看不见的托盘项，而且没有任何错误信息。
+///
+/// 与 assets/tray/tray_icon.png 是同一张图，改图时两边要同步。
+const String kTrayIconPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAjklEQVR42mNgGErgRajuBSD+TwBfoLalvURYigv3Umr5Qwosh+GH5FqOYRixAJteiiwnF5DlCGpZTpYj0OOcWoCoNIGe2qkNCOYOWlqOzRGDywHIJRytAdYSkx6+xxsKow4YdcCoAwaDAwa2IBqtCwZFdTzgDZJB0SQbFI3SQdEsHxQdk0HRNRsUnVNaAwAyBewA2r50YQAAAABJRU5ErkJggg==';

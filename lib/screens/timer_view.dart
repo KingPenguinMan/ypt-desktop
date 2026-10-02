@@ -239,15 +239,18 @@ class _SubjectCard extends StatelessWidget {
     void toggle() {
       final app = context.read<AppState>();
       if (active) {
-        // 停止后立即询问"这段时间在做什么"。
-        // 官方客户端同样是停止即弹（i18n key
-        // alert_stop_study_just_now_record），此时空档区间已确定。
-        app.stopTimer().then((_) {
-          // await 之后不能再用 context，必须先检查 mounted。
-          // 这里用 context.mounted 而不是 mounted——_SubjectCard 是
-          // StatelessWidget，没有自己的 mounted 成员。
-          if (!context.mounted) return;
-          GapPromptDialog.maybeShow(context, app.pendingGap);
+        app.stopTimer();
+        return;
+      }
+      // 开始计时前，若上一段空档够长就先问"这段时间在做什么"。
+      //
+      // 必须在这里问，不能像之前那样在停止时问：空档从"停止那一刻"开始
+      // 累积，停止后立刻弹窗时它还是 0 秒，永远达不到 1 分钟阈值，
+      // 弹窗因此从不出现（这是上一版的逻辑自相矛盾）。
+      // 等到用户再次开始时，空档已经真实累积，阈值判断才有意义。
+      if (GapPromptDialog.shouldAsk(app.pendingGap)) {
+        GapPromptDialog.maybeShow(context, app.pendingGap).then((_) {
+          app.startTimer(s);
         });
       } else {
         app.startTimer(s);

@@ -63,20 +63,33 @@ class _SubjectPieChartState extends State<SubjectPieChart> {
                     total: data.totalMs,
                     highlightIndex: _hoverIndex,
                   ),
-                  // 透明 MouseRegion 只为捕获 hover，触摸设备上靠点选图例。
-                  child: const SizedBox.expand(),
+                  // 圆环中心显示当前聚焦项的数值。
+                  //
+                  // 详情原先放在右侧、和图例争用同一个 Expanded 槽位——
+                  // 鼠标移上图例行后图例被替换掉，被 hover 的组件随即从树上
+                  // 消失，触发 onExit 复位，图例又出现，onEnter 再触发……
+                  // 结果是图例疯狂闪烁。改到中心就消除了这个竞争：
+                  // 图例始终在，hover 目标不会消失。
+                  child: Center(
+                    child: _FocusedDetail(
+                      slice: hovered,
+                      total: data.totalMs,
+                      // 内孔直径约为 size*0.59（见 _PiePainter 的几何推算），
+                      // 取 0.5 留出余量，避免文字压到环上。
+                      innerSize: widget.size * 0.5,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 20),
-              // 中心或右侧显示当前聚焦项的数值
+              // 图例常驻，不随 hover 切换。
               Expanded(
-                child: hovered == null
-                    ? _Legend(
-                        slices: data.slices,
-                        total: data.totalMs,
-                        onHover: (i) => setState(() => _hoverIndex = i),
-                      )
-                    : _FocusedDetail(slice: hovered, total: data.totalMs),
+                child: _Legend(
+                  slices: data.slices,
+                  total: data.totalMs,
+                  onHover: (i) => setState(() => _hoverIndex = i),
+                  activeIndex: _hoverIndex,
+                ),
               ),
             ],
           ),
@@ -101,7 +114,17 @@ class _PiePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (total <= 0) return;
     final center = size.center(Offset.zero);
-    final radius = math.min(size.width, size.height) / 2 - 6;
+
+    // 几何要点：drawArc 的描边以路径为中心向两侧各扩一半。
+    // 原先写 radius = halfSize - 6 再配 strokeWidth = radius * 0.34，
+    // 外缘会到 radius + strokeWidth/2 = 92.4，而画布半宽只有 85 ——
+    // 圆环被画布裁掉，看起来像缺了边。
+    // 现在反过来：先定最大可用半径，由它推出描边厚度和绘制半径，
+    // 并用最粗的那档（高亮态）来算，保证高亮时也不越界。
+    final maxR = math.min(size.width, size.height) / 2;
+    final baseThick = maxR * 0.32;
+    final hotThick = baseThick * 1.25;
+    final radius = maxR - hotThick / 2 - 1; // 留 1px 边
     final rect = Rect.fromCircle(center: center, radius: radius);
 
     // 起点在12 点方向，顺时针。
@@ -119,8 +142,7 @@ class _PiePainter extends CustomPainter {
       final isHot = highlightIndex == i;
       final paint = Paint()
         ..style = PaintingStyle.stroke
-        // 高亮时加粗并外扩，非高亮时用半透明让被选中的更突出。
-        ..strokeWidth = isHot ? radius * 0.42 : radius * 0.34
+        ..strokeWidth = isHot ? hotThick : baseThick
         ..strokeCap = StrokeCap.butt
         ..color = isHot
             ? slice.color
@@ -141,10 +163,18 @@ class _PiePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_PiePainter old) =>
-      old.total != total ||
-      old.highlightIndex != highlightIndex ||
-      old.slices.length != slices.length;
+  bool shouldRepaint(_PiePainter old) {
+    if (old.total != total || old.highlightIndex != highlightIndex) return true;
+    if (old.slices.length != slices.length) return true;
+    // 只比长度不够：科目时长变化但段数不变时（例如两个科目互换大小），
+    // 画布不会重绘，界面上就是过期数据。逐项比较值与颜色。
+    for (var i = 0; i < slices.length; i++) {
+      if (old.slices[i].value != slices[i].value) return true;
+      if (old.slices[i].color != slices[i].color) return true;
+      if (old.slices[i].label != slices[i].label) return true;
+    }
+    return false;
+  }
 }
 
 class _Legend extends StatelessWidget {
@@ -152,10 +182,14 @@ class _Legend extends StatelessWidget {
   final int total;
   final ValueChanged<int?> onHover;
 
+  /// 当前聚焦项，用于把对应行加重显示。图例本身始终完整可见。
+  final int? activeIndex;
+
   const _Legend({
     required this.slices,
     required this.total,
     required this.onHover,
+    this.activeIndex,
   });
 
   @override
@@ -188,16 +222,27 @@ class _Legend extends StatelessWidget {
                         slices[i].label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: activeIndex == i
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Text(
                       '${(slices[i].value / total * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        // 选中行用亮色，其余用灰，避免只靠加粗区分。
+                        color: activeIndex == i
+                            ? const Color(0xFFE8E8E8)
+                            : const Color(0xFF9E9E9E),
+                        fontWeight: activeIndex == i
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
@@ -210,54 +255,55 @@ class _Legend extends StatelessWidget {
   }
 }
 
+/// 圆环中心的内容：未聚焦时显示总时长，聚焦时显示该项的时长与占比。
+///
+/// 放在圆环中心而不是侧栏，是为了不和图例争用同一个布局槽位——
+/// 那会导致图例在 hover 时被替换、进而疯狂闪烁。
 class _FocusedDetail extends StatelessWidget {
-  final PieSlice slice;
+  final PieSlice? slice;
   final int total;
 
-  const _FocusedDetail({required this.slice, required this.total});
+  /// 圆环内孔直径，用来约束文字宽度，避免文字压到环上。
+  final double innerSize;
+
+  const _FocusedDetail({
+    required this.slice,
+    required this.total,
+    required this.innerSize,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final s = slice;
+    return SizedBox(
+      width: innerSize,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: slice.color,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  slice.label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           Text(
-            _fmtMs(slice.value),
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              fontFeatures: [FontFeature.tabularFigures()],
+            s == null ? '今日总计' : s.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF9E9E9E)),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              _fmtMs(s?.value ?? total),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-          Text(
-            '占总时长 ${(slice.value / total * 100).toStringAsFixed(1)}%',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          if (s != null && total > 0)
+            Text(
+              '${(s.value / total * 100).toStringAsFixed(1)}%',
+              style: const TextStyle(fontSize: 10, color: Color(0xFF9E9E9E)),
+            ),
         ],
       ),
     );

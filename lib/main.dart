@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'app_log.dart';
 import 'app_state.dart';
 import 'ca_setup.dart';
 import 'tray_service.dart';
@@ -20,7 +21,11 @@ TrayService? _tray;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AppLog.init();
+  AppLog.log('===== app 启动 =====');
+  AppLog.log('日志文件: ${AppLog.path}');
   await setupCaCerts(); // Windows TLS 루트 보완 (웹/기타 플랫폼은 no-op)
+  AppLog.step('setupCaCerts', 'ok');
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppState()..tryAutoLogin(),
@@ -54,15 +59,20 @@ class _YptAppState extends State<YptApp> {
     super.initState();
     // 托盘菜单要用到 user/科目，登录前建没有内容，所以等首帧之后再建。
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      AppLog.log('postFrame: 准备初始化托盘 (mounted=$mounted)');
       if (!mounted) return;
       final app = context.read<AppState>();
-      if (_tray != null) return;
+      if (_tray != null) {
+        AppLog.log('postFrame: 已存在托盘实例，跳过');
+        return;
+      }
       _app = app;
       final tray = TrayService(app);
       _tray = tray;
       await tray.init();
       if (!mounted) {
         // init 期间 widget 可能已被销毁。
+        AppLog.log('postFrame: init 后 widget 已销毁，释放托盘');
         tray.dispose();
         _tray = null;
         return;
@@ -76,6 +86,7 @@ class _YptAppState extends State<YptApp> {
       _trayTick = tray.tickSync;
       app.addListener(_traySync!);
       _cancelTrayTick = app.addTickListener(_trayTick!);
+      AppLog.log('postFrame: 托盘回调已注册');
     });
   }
 

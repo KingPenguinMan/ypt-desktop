@@ -183,6 +183,11 @@ echo   5) stop a timer, wait over 1 min, start again:
 echo      the "what were you doing" dialog should appear
 echo   6) open the History tab: calendar heatmap + pie chart
 echo.
+echo Runtime log (release builds have no console output):
+echo   %%LOCALAPPDATA%%\ypt_client\ypt.log
+echo   The tray logs every init step and the result of setVisible.
+echo   If the tray icon does not appear, this file says why.
+echo.
 echo Linux/macOS notes:
 echo   Linux needs: sudo apt-get install libgtk-3-dev libx11-dev libxi-dev
 echo   macOS  needs 10.15+; social login is still unavailable there.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app_log.dart';
 import '../app_state.dart';
 import '../gap_log.dart';
 import '../main.dart' show kBrand, kCard, kCard2;
@@ -29,19 +30,37 @@ class GapPromptDialog extends StatefulWidget {
 
   /// 判断这次是否值得问。
   static bool shouldAsk(GapInterval? gap) {
-    if (gap == null) return false;
-    if (!gap.isOpen) return false;
-    return gap.duration >= minMeaningfulGap;
+    if (gap == null) {
+      AppLog.log('gap.shouldAsk: 无待补录空档 -> false');
+      return false;
+    }
+    if (!gap.isOpen) {
+      AppLog.log('gap.shouldAsk: 空档已闭合 -> false');
+      return false;
+    }
+    final ok = gap.duration >= minMeaningfulGap;
+    AppLog.log('gap.shouldAsk: 已过 ${gap.duration.inSeconds}s '
+        '(阈值 ${minMeaningfulGap.inSeconds}s) -> $ok');
+    return ok;
   }
 
   /// 便捷入口：需要问就弹，不需要就直接返回。
   static Future<void> maybeShow(BuildContext context, GapInterval? gap) async {
-    if (!shouldAsk(gap)) return;
-    if (!context.mounted) return;
+    AppLog.log('gap.maybeShow: 进入 (gap=${gap == null ? "null" : "${gap.duration.inSeconds}s open=${gap.isOpen}"})');
+    if (!shouldAsk(gap)) {
+      AppLog.log('gap.maybeShow: 条件不满足，不弹窗');
+      return;
+    }
+    if (!context.mounted) {
+      AppLog.log('gap.maybeShow: context 已失效，放弃');
+      return;
+    }
+    AppLog.log('gap.maybeShow: 弹出对话框');
     await showDialog<void>(
       context: context,
       builder: (_) => GapPromptDialog(gap: gap!),
     );
+    AppLog.log('gap.maybeShow: 对话框已关闭');
   }
 
   @override
@@ -91,7 +110,7 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '你停止了计时 $minutes 分钟，期间不在学习状态。',
+              '距离上次停止计时已过去 $minutes 分钟，这段时间没有计入学习。',
               style: TextStyle(color: Color(0xFFBDBDBD), fontSize: 13),
             ),
             const SizedBox(height: 16),
