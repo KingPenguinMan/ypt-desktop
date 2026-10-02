@@ -76,17 +76,21 @@ if errorlevel 1 (
 echo.
 
 REM ---------- 2. analyze ----------
-echo [2/7] Static analysis (flutter analyze)...
-call "%FLUTTER%" analyze
+REM --no-fatal-infos / --no-fatal-warnings: only errors should stop the
+REM build. Without them `flutter analyze` exits non-zero for any lint
+REM (including info-level style suggestions), which is noise.
+echo [2/7] Static analysis (flutter analyze, errors only)...
+call "%FLUTTER%" analyze --no-fatal-infos --no-fatal-warnings
 if errorlevel 1 (
     echo.
-    echo   [WARN] analyze reported problems. Save the output above.
-    echo   Most likely cause: tray_manager / window_manager API mismatch.
+    echo   [ERROR] analyze found compile errors. Fix the output above.
+    echo   See docs\DEPENDENCY_API_NOTES.md for the tray_manager and
+    echo   window_manager API reference if the error is in those files.
     echo.
     pause
     exit /b 1
 )
-echo   analyze passed.
+echo   analyze passed ^(no errors^).
 echo.
 
 REM ---------- 3. logic tests ----------

@@ -131,9 +131,9 @@ class CalendarHeatmap extends StatelessWidget {
     final isFuture = date.isAfter(today);
 
     return Tooltip(
-      message: isFuture
-          ? '$key'
-          : '${key}\n${HeatLevel.label(dur)}',
+      // 不用 '$key' / '${HeatLevel.label(dur)}'——$ 后面跟标识符时
+      // 直接写变量名即可，$key 就是 key 而不是字面量 "$key"。
+      message: isFuture ? key : '$key\n${HeatLevel.label(dur)}',
       child: GestureDetector(
         onTap: isFuture ? null : () => onSelect?.call(key),
         child: Container(

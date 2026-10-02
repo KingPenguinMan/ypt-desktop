@@ -312,7 +312,8 @@ class _GapRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border(
           left: BorderSide(
-            color: tag == null ? Color(0xFF757575)! : kBrand,
+            // Color(0xFF757575) 是非空常量，不需要 ! 断言。
+            color: tag == null ? const Color(0xFF757575) : kBrand,
             width: 2.5,
           ),
         ),

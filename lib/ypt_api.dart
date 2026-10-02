@@ -5,7 +5,7 @@ import 'models.dart';
 import 'social_auth.dart';
 
 /// YPT API 클라이언트. RE 스펙 (YPT_API_SPEC_FINAL.md) 기반.
-/// base=https://pi.tgclab.com, 인증=Authorization: JWT <token>.
+/// base=https://pi.tgclab.com, 인증=`Authorization: JWT <token>`.
 class YptApi {
   static const String base = 'https://pi.tgclab.com';
   static const Duration requestTimeout = Duration(seconds: 15);
