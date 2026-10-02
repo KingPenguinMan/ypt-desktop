@@ -36,7 +36,7 @@ echo ============================================================
 echo.
 
 REM ---------- 0. environment ----------
-echo [0/7] Checking Flutter SDK...
+echo [0/8] Checking Flutter SDK...
 if not exist "%FLUTTER%" (
     echo   [ERROR] %FLUTTER% not found.
     echo   Install Flutter 3.47+ and edit FLUTTER in this script.
@@ -50,7 +50,7 @@ call "%FLUTTER%" --version
 echo.
 
 REM ---------- 1. deps ----------
-echo [1/7] Fetching dependencies...
+echo [1/8] Fetching dependencies...
 call "%FLUTTER%" pub get
 if errorlevel 1 (
     echo   [ERROR] pub get failed.
@@ -60,7 +60,7 @@ if errorlevel 1 (
 echo.
 
 REM ---------- 1b. native toolchain check ----------
-echo [1b/7] Checking native toolchain for cnativeapi...
+echo [1b/8] Checking native toolchain for cnativeapi...
 call "%FLUTTER%" doctor -v 2>&1 | findstr /i "Visual Studio" > "%TEMP%\ypt_vs.txt"
 type "%TEMP%\ypt_vs.txt"
 findstr /i "Visual Studio" "%TEMP%\ypt_vs.txt" >nul
@@ -79,7 +79,7 @@ REM ---------- 2. analyze ----------
 REM --no-fatal-infos / --no-fatal-warnings: only errors should stop the
 REM build. Without them `flutter analyze` exits non-zero for any lint
 REM (including info-level style suggestions), which is noise.
-echo [2/7] Static analysis (flutter analyze, errors only)...
+echo [2/8] Static analysis (flutter analyze, errors only)...
 call "%FLUTTER%" analyze --no-fatal-infos --no-fatal-warnings
 if errorlevel 1 (
     echo.
@@ -97,7 +97,7 @@ REM ---------- 3. static check + logic tests ----------
 REM All three run in place from the project root.
 REM staticcheck MUST run here: it reads lib/ relatively, so copying it to
 REM %TEMP% would break it.
-echo [3/7] Static check + logic self-tests...
+echo [3/8] Static check + logic self-tests...
 
 echo   [3a] static check: duplicate members, unused imports
 "%DARTEXE%" run tool\staticcheck.dart
@@ -123,7 +123,7 @@ if errorlevel 1 (
 echo.
 
 REM ---------- 4. build ----------
-echo [4/7] Building Windows release...
+echo [4/8] Building Windows release...
 echo   (first build may take several minutes: cnativeapi compiles C++)
 call "%FLUTTER%" build windows --release
 if errorlevel 1 (
@@ -149,7 +149,7 @@ if errorlevel 1 (
 echo.
 
 REM ---------- 5. artifact ----------
-echo [5/7] Artifact:
+echo [5/8] Artifact:
 if exist "build\windows\x64\runner\Release\ypt_client.exe" (
     for %%F in ("build\windows\x64\runner\Release\*") do @echo     %%~nxF
 ) else (
@@ -158,7 +158,7 @@ if exist "build\windows\x64\runner\Release\ypt_client.exe" (
 echo.
 
 REM ---------- 6. package ----------
-echo [6/7] Packaging zip...
+echo [6/8] Packaging zip...
 if exist "..\ypt_client-windows-x64.zip" del "..\ypt_client-windows-x64.zip"
 powershell -NoProfile -Command ^
   "Compress-Archive -Path 'build\windows\x64\runner\Release\*' -DestinationPath '..\ypt_client-windows-x64.zip' -Force"
@@ -167,6 +167,22 @@ if exist "..\ypt_client-windows-x64.zip" (
 ) else (
     echo   [WARN] packaging failed.
 )
+echo.
+
+REM ---------- 7. prepare runtime log ----------
+REM Release Flutter apps have no console, so the app writes its own log.
+REM Create the folder now and clear any stale file, so that after the first
+REM run the log contains only that run.
+echo [7/8] Preparing runtime log location...
+set LOGDIR=%LOCALAPPDATA%\ypt_client
+if not exist "%LOGDIR%" mkdir "%LOGDIR%"
+if exist "%LOGDIR%\ypt.log" del "%LOGDIR%\ypt.log"
+if exist "%LOGDIR%\ypt.log" (
+    echo   [WARN] could not clear the old log.
+) else (
+    echo   Old log cleared.
+)
+echo   Log file: %LOGDIR%\ypt.log
 echo.
 
 echo ============================================================
