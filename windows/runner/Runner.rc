@@ -92,9 +92,9 @@ BEGIN
             VALUE "CompanyName", "deveworld" "\0"
             VALUE "FileDescription", "YPT" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ypt_client" "\0"
+            VALUE "InternalName", "ypt-desktop" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 deveworld (original project); 2026 KingPenguinMan (fork). All rights reserved." "\0"
-            VALUE "OriginalFilename", "ypt_client.exe" "\0"
+            VALUE "OriginalFilename", "ypt-desktop.exe" "\0"
             VALUE "ProductName", "YPT" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

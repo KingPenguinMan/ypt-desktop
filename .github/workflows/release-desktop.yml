@@ -22,15 +22,15 @@ jobs:
           - label: Linux x64
             os: ubuntu-latest
             platform: linux
-            asset: ypt_client-linux-x64
+            asset: ypt-desktop-linux-x64
           - label: Windows x64
             os: windows-latest
             platform: windows
-            asset: ypt_client-windows-x64
+            asset: ypt-desktop-windows-x64
           - label: macOS x64
             os: macos-15-intel
             platform: macos
-            asset: ypt_client-macos-x64
+            asset: ypt-desktop-macos-x64
 
     steps:
       - name: Check out repository

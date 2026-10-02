@@ -10,11 +10,11 @@ REM  Keep this file pure ASCII too: the console may be GBK (CP936).
 REM ------------------------------------------------------------
 
 REM ============================================================
-REM  ypt_client - build and test script
+REM  ypt-desktop - build and test script
 REM
 REM  Usage:
 REM    1) Run build_and_test.bat  (double-click works)
-REM    2) Close any running ypt_client.exe first
+REM    2) Close any running ypt-desktop.exe first
 REM
 REM  Requires Flutter 3.47+ (expected at D:\flutter)
 REM
@@ -31,7 +31,7 @@ set DARTEXE=D:\flutter\bin\cache\dart-sdk\bin\dart.exe
 
 echo.
 echo ============================================================
-echo   ypt_client  build and test
+echo   ypt-desktop  build and test
 echo ============================================================
 echo.
 
@@ -50,15 +50,15 @@ call "%FLUTTER%" --version
 echo.
 
 REM ---------- 0b. running instance ----------
-REM A running ypt_client.exe keeps files in the build output folder
+REM A running ypt-desktop.exe keeps files in the build output folder
 REM open. The zip step then fails with a sharing violation, which
 REM surfaces as a confusing PowerShell error instead of the real
 REM cause. Catch it here.
 echo [0b/8] Checking for a running instance...
-tasklist /FI "IMAGENAME eq ypt_client.exe" /NH > "%TEMP%\ypt_ps.txt" 2>nul
-findstr /I "ypt_client.exe" "%TEMP%\ypt_ps.txt" >nul
+tasklist /FI "IMAGENAME eq ypt-desktop.exe" /NH > "%TEMP%\ypt_ps.txt" 2>nul
+findstr /I "ypt-desktop.exe" "%TEMP%\ypt_ps.txt" >nul
 if not errorlevel 1 (
-    echo   [ERROR] ypt_client.exe is still running.
+    echo   [ERROR] ypt-desktop.exe is still running.
     echo   Close it first: Quit from the tray menu, or Task Manager.
     echo   Why: the running app holds files in the build output folder
     echo   open, so packaging would fail with a sharing violation.
@@ -197,7 +197,7 @@ echo.
 
 REM ---------- 5. artifact ----------
 echo [5/8] Artifact:
-if exist "build\windows\x64\runner\Release\ypt_client.exe" (
+if exist "build\windows\x64\runner\Release\ypt-desktop.exe" (
     for %%F in ("build\windows\x64\runner\Release\*") do @echo     %%~nxF
 ) else (
     echo   [WARN] expected exe not found, check the build folder.
@@ -206,11 +206,11 @@ echo.
 
 REM ---------- 6. package ----------
 echo [6/8] Packaging zip...
-if exist "..\ypt_client-windows-x64.zip" del "..\ypt_client-windows-x64.zip"
+if exist "..\ypt-desktop-windows-x64.zip" del "..\ypt-desktop-windows-x64.zip"
 powershell -NoProfile -Command ^
-  "Compress-Archive -Path 'build\windows\x64\runner\Release\*' -DestinationPath '..\ypt_client-windows-x64.zip' -Force"
-if exist "..\ypt_client-windows-x64.zip" (
-    for %%F in ("..\ypt_client-windows-x64.zip") do @echo     %%~zF bytes  %%~nF
+  "Compress-Archive -Path 'build\windows\x64\runner\Release\*' -DestinationPath '..\ypt-desktop-windows-x64.zip' -Force"
+if exist "..\ypt-desktop-windows-x64.zip" (
+    for %%F in ("..\ypt-desktop-windows-x64.zip") do @echo     %%~zF bytes  %%~nF
 ) else (
     echo   [WARN] packaging failed.
 )
@@ -237,7 +237,7 @@ echo   DONE
 echo ============================================================
 echo.
 echo Acceptance checklist:
-echo   1) run ypt_client.exe, sign in with email
+echo   1) run ypt-desktop.exe, sign in with email
 echo   2) start a timer, note the time, then END THE PROCESS
 echo      from Task Manager (do not close the window)
 echo   3) reopen: it must restore "currently studying" and allow stop
@@ -247,7 +247,7 @@ echo      the "what were you doing" dialog should appear
 echo   6) open the History tab: calendar heatmap + pie chart
 echo.
 echo Runtime log (release builds have no console output):
-echo   %%LOCALAPPDATA%%\ypt_client\ypt.log
+echo   %%LOCALAPPDATA%%\ypt-desktop\ypt.log
 echo   The tray logs every init step and the result of setVisible.
 echo   If the tray icon does not appear, this file says why.
 echo.

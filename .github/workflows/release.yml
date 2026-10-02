@@ -20,9 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  platform: linux,   name: ypt_client-linux-x64 }
-          - { os: windows-latest, platform: windows, name: ypt_client-windows-x64 }
-          - { os: macos-latest,   platform: macos,   name: ypt_client-macos }
+          - { os: ubuntu-latest,  platform: linux,   name: ypt-desktop-linux-x64 }
+          - { os: windows-latest, platform: windows, name: ypt-desktop-windows-x64 }
+          - { os: macos-latest,   platform: macos,   name: ypt-desktop-macos }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

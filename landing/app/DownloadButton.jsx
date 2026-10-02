@@ -6,15 +6,15 @@ import { Download } from "lucide-react";
 // 버전 무관 고정 에셋 이름 → /releases/latest/download 로 항상 최신 릴리스 연결.
 const targets = {
   windows: {
-    asset: "ypt_client-windows-x64.zip",
+    asset: "ypt-desktop-windows-x64.zip",
     label: { en: "Download for Windows", ko: "Windows 다운로드" }
   },
   macos: {
-    asset: "ypt_client-macos.zip",
+    asset: "ypt-desktop-macos.zip",
     label: { en: "Download for macOS", ko: "macOS 다운로드" }
   },
   linux: {
-    asset: "ypt_client-linux-x64.zip",
+    asset: "ypt-desktop-linux-x64.zip",
     label: { en: "Download for Linux", ko: "Linux 다운로드" }
   },
   unknown: {
