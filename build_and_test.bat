@@ -49,6 +49,28 @@ REM does NOT return here -- the outer script silently stops after step 0.
 call "%FLUTTER%" --version
 echo.
 
+REM ---------- 0b. running instance ----------
+REM A running ypt_client.exe keeps files in the build output folder
+REM open. The zip step then fails with a sharing violation, which
+REM surfaces as a confusing PowerShell error instead of the real
+REM cause. Catch it here.
+echo [0b/8] Checking for a running instance...
+tasklist /FI "IMAGENAME eq ypt_client.exe" /NH > "%TEMP%\ypt_ps.txt" 2>nul
+findstr /I "ypt_client.exe" "%TEMP%\ypt_ps.txt" >nul
+if not errorlevel 1 (
+    echo   [ERROR] ypt_client.exe is still running.
+    echo   Close it first: Quit from the tray menu, or Task Manager.
+    echo   Why: the running app holds files in the build output folder
+    echo   open, so packaging would fail with a sharing violation.
+    echo.
+    del "%TEMP%\ypt_ps.txt" 2>nul
+    pause
+    exit /b 1
+)
+del "%TEMP%\ypt_ps.txt" 2>nul
+echo   No running instance.
+echo.
+
 REM ---------- 1. deps ----------
 echo [1/8] Fetching dependencies...
 call "%FLUTTER%" pub get
