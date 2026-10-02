@@ -260,6 +260,24 @@ void main() {
   check('update 不会误删邻居',
       g1.copyWith(tag: 'z').tag == 'z' && g2.tag == 'y');
 
+  print('\n=== 空档是否值得记录（阈值判定） ===');
+  // 这段镜像 lib/gap_log.dart 的 kMinMeaningfulGap / isGapLongEnough。
+  // 因为是独立复制的纯逻辑，两边改动必须同步 —— 这里多写一行注释，
+  // 免得以后只看测试以为规则在别处。
+  //
+  // 这条规则此前完全没有测试覆盖，导致"过短空档被无条件写进记录"
+  // 的 bug 一直到用户反馈才暴露（History 里堆出一串 0m 未填写）。
+  const minGap = Duration(minutes: 1);
+  bool longEnough(Duration d) => d >= minGap;
+
+  check('0 秒 -> 不记录（用户实际遇到的垃圾记录）', !longEnough(Duration.zero));
+  check('5 秒 -> 不记录', !longEnough(const Duration(seconds: 5)));
+  check('59 秒 -> 不记录', !longEnough(const Duration(seconds: 59)));
+  check('正好 60 秒 -> 记录（边界含等于）',
+      longEnough(const Duration(seconds: 60)));
+  check('61 秒 -> 记录', longEnough(const Duration(seconds: 61)));
+  check('1 小时 -> 记录', longEnough(const Duration(hours: 1)));
+
   print('\n=== 结果 ===');
   print('  passed: $_pass   failed: $_fail');
   if (_fail > 0) {

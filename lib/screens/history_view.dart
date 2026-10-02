@@ -305,6 +305,28 @@ class _GapRow extends StatelessWidget {
     final dur = entry.duration;
     final start = entry.start;
 
+    // 整行可点，点开补填自述内容。
+    //
+    // 没有这个入口的话，"未填写"的记录就是死数据：用户只能删掉，
+    // 等于白丢一段可复盘的信息。从托盘直接开始计时产生的记录尤其需要它
+    // —— 那条路径没有合适的时机弹窗。
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => GapPromptDialog.showForEdit(context, entry),
+        borderRadius: BorderRadius.circular(10),
+        child: _buildCard(context, tag, activity, dur, start),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    String? tag,
+    String activity,
+    Duration dur,
+    DateTime start,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -344,7 +366,7 @@ class _GapRow extends StatelessWidget {
                     ],
                     Expanded(
                       child: Text(
-                        activity.isEmpty ? '(未填写)' : activity,
+                        activity.isEmpty ? '点击补填这段时间在做什么' : activity,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

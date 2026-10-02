@@ -129,7 +129,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo   [3b] logic self-tests, 76 assertions
+REM Do not hardcode the assertion count: it goes stale as cases are
+REM added (it was 76, now 82).
+echo   [3b] logic self-tests
 "%DARTEXE%" run tool\selftest.dart
 if errorlevel 1 (
     echo   [ERROR] selftest failed.

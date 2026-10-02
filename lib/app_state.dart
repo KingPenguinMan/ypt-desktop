@@ -7,6 +7,7 @@ import 'ypt_api.dart';
 import 'models.dart';
 import 'social_auth.dart';
 import 'timer_persistence.dart';
+import 'app_log.dart';
 import 'gap_log.dart';
 import 'history_models.dart';
 
@@ -533,10 +534,27 @@ class AppState extends ChangeNotifier {
       if (!ok) return;
     }
 
-    // 若上次停止后有一个未记录的空档，在开始新会话前先闭合它。
+    // 收尾上一次停止后留下的空档。
+    //
+    // 这里**不能无条件 commit**：空档从"停止那一刻"开始累积，用户可能几秒
+    // 后就重新开始，甚至只是点错了。把这种空档也写成记录，History 里就会
+    // 堆出一串 "0m · 未填写" 的垃圾条目（用户实际遇到过，见问题反馈）。
+    //
+    // 判定规则：
+    //   · 时长 >= 阈值 —— 保留。走到这里说明调用方没有询问过（例如从托盘
+    //     菜单直接开始，那里弹窗不合适），先落成一条未回答的记录，
+    //     用户可以在 History 里补填。
+    //   · 时长 < 阈值 —— 丢弃。太短，没有任何记录价值。
     if (pendingGap != null && pendingGap!.isOpen) {
       final gap = pendingGap!;
-      await _gapLog.commit(gap.copyWith(end: DateTime.now()));
+      final meaningful = isGapLongEnough(gap.duration);
+      AppLog.log('start: 收尾空档 ${gap.duration.inSeconds}s '
+          '${meaningful ? "(保留，可在 History 补填)" : "(过短，丢弃)"}');
+      if (meaningful) {
+        await _gapLog.commit(gap.copyWith(end: DateTime.now()));
+      } else {
+        await _gapLog.clearOpen();
+      }
       pendingGap = null;
     }
 
@@ -689,6 +707,44 @@ class AppState extends ChangeNotifier {
       );
     } catch (e) {
       // 本地已保存,这里只提示云端没成功能。
+      gapSyncErrorText =
+          'Saved locally, but YPT server rejected it: ${_readableError(e)}';
+      notifyListeners();
+    }
+  }
+
+  /// 补填或修改一条已闭合空档的自述内容。
+  ///
+  /// 存在的原因：从托盘菜单直接开始计时时弹窗并不合适，那种情况下空档会被
+  /// 落成一条"未填写"的记录。若这些记录无法再编辑，就变成了死数据 ——
+  /// 用户只能删掉，等于白白丢了一段可复盘的信息。
+  ///
+  /// 这里**不用 copyWith**：它的实现是 `activity ?? this.activity`，
+  /// 传 null 会保留旧值，导致"清空已填内容"做不到。直接构造更明确。
+  Future<void> updateGapLabel(
+    GapInterval gap, {
+    String? tag,
+    String? activity,
+  }) async {
+    final trimmed = activity?.trim();
+    final updated = GapInterval(
+      start: gap.start,
+      end: gap.end,
+      activity: (trimmed == null || trimmed.isEmpty) ? null : trimmed,
+      tag: tag,
+    );
+    await _gapLog.update(updated);
+    notifyListeners();
+
+    // 与 commitPendingGap 保持一致：只有回答过的才上报，避免污染统计。
+    if (!updated.isAnswered || updated.end == null) return;
+    try {
+      await api.recordRest(
+        startedAtMs: updated.start.millisecondsSinceEpoch,
+        endedAtMs: updated.end!.millisecondsSinceEpoch,
+        tag: updated.tag,
+      );
+    } catch (e) {
       gapSyncErrorText =
           'Saved locally, but YPT server rejected it: ${_readableError(e)}';
       notifyListeners();
