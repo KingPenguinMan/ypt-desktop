@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'social_credentials.dart';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -64,12 +65,16 @@ class SocialProvider {
   });
 
   /// 카카오. keyHash는 안드로이드 SDK 전용이라 REST 흐름엔 불필요.
+  ///
+  /// clientId 는 lib/social_credentials.dart 에서 온다(미추적 파일).
+  /// redirect URI/Scheme 은 clientId 에서 파생되므로 함께 조립한다 —
+  /// 값을 두 군데에 복사해두면 한쪽만 바뀌었을 때 조용히 깨진다.
   static const kakao = SocialProvider(
     name: 'Kakao',
     idPrefix: 'k',
-    clientId: 'REDACTED_KAKAO_CLIENT_ID',
-    redirectUri: 'kakaoREDACTED_KAKAO_CLIENT_ID://oauth',
-    redirectScheme: 'kakaoREDACTED_KAKAO_CLIENT_ID',
+    clientId: SocialCredentials.kakaoClientId,
+    redirectUri: 'kakao${SocialCredentials.kakaoClientId}://oauth',
+    redirectScheme: 'kakao${SocialCredentials.kakaoClientId}',
     authorizeBase: 'https://kauth.kakao.com/oauth/authorize',
     tokenBase: 'https://kauth.kakao.com/oauth/token',
     meUrl: 'https://kapi.kakao.com/v2/user/me',
@@ -81,8 +86,8 @@ class SocialProvider {
   static const naver = SocialProvider(
     name: 'Naver',
     idPrefix: 'n',
-    clientId: 'REDACTED_NAVER_CLIENT_ID',
-    clientSecret: 'REDACTED_NAVER_CLIENT_SECRET',
+    clientId: SocialCredentials.naverClientId,
+    clientSecret: SocialCredentials.naverClientSecret,
     redirectUri: 'com.pallo.passiontimerscoped', // NidOAuth callbackUrl = 패키지명
     redirectScheme: 'naver3rdpartylogin',
     authorizeBase: 'https://nid.naver.com/oauth2.0/authorize',

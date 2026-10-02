@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'ypt_api.dart';
 import 'models.dart';
 import 'social_auth.dart';
+import 'social_credentials.dart';
 import 'timer_persistence.dart';
 import 'app_log.dart';
 import 'gap_log.dart';
@@ -434,6 +435,14 @@ class AppState extends ChangeNotifier {
   /// 소셜 로그인 (Kakao/Naver): 시스템 브라우저 OAuth → YPT 교환 → jwt 저장.
   /// 반환: true=성공, false=실패/취소.
   Future<bool> socialLogin(SocialProvider provider) async {
+    // 凭证不在仓库里（见 lib/social_credentials.dart 的说明）。
+    // 未配置时直接给出可操作的错误，而不是发一个注定 401 的请求让用户猜。
+    if (!SocialCredentials.isConfigured) {
+      errorText = '社交登录未配置：请复制 lib/social_credentials.example.dart '
+          '为 lib/social_credentials.dart 并填入 ${provider.name} 的凭证。';
+      notifyListeners();
+      return false;
+    }
     loading = true;
     errorText = null;
     notifyListeners();

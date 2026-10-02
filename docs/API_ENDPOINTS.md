@@ -265,8 +265,11 @@ i18n key：`planner_menu_study_log`、`planner_study_log_editor_*`、`planner_di
 
 Firehound 事件（VX Underground / CovertLabs，TechRadar 报道）列出 YPT 涉及 200 万+ 用户数据泄露（聊天消息、AI tokens、用户 ID、用户 keys）。因此本客户端的存储安全应当收紧：
 
-- `ypt_api.dart:14-15` 硬编码伪装成安卓机的设备指纹 `SM-S921N`
+- `ypt_api.dart` 硬编码伪装成安卓机的设备指纹 `SM-S921N`
 - JWT 明文存 `shared_preferences`
-- `social_auth.dart:70,84-85` 硬编码从 APK 提取的 OAuth `clientId` / `clientSecret`
+- 从 APK 提取的 OAuth `clientId` / `clientSecret` 曾硬编码在 `social_auth.dart`；
+  现已移至 **`lib/social_credentials.dart`，该文件不纳入版本控制**（模板见
+  `lib/social_credentials.example.dart`）。公开仓库中不含这些凭证。
 
-建议后续迁移到 `flutter_secure_storage`（Windows DPAPI / macOS Keychain），密钥移 `--dart-define`。
+建议后续迁移到 `flutter_secure_storage`（Windows DPAPI / macOS Keychain），密钥改由
+构建期注入（`--dart-define`）而非源码常量。

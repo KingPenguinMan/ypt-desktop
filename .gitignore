@@ -39,6 +39,15 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Local-only credentials.
+# Real clientId/clientSecret values live here and MUST NOT be committed;
+# the tracked template is lib/social_credentials.example.dart.
+lib/social_credentials.dart
+
+# Local build/run output
+/build_output/
+*.zip
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
