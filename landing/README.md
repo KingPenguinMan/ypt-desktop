@@ -21,8 +21,12 @@ npm run build
 
 The build exports static files to `out/`.
 
-The repository workflow builds the Flutter web demo from the root project and
-copies it into `landing/out/demo/`, then deploys `landing/out` to GitHub Pages.
+The repository workflow (`.github/workflows/deploy-web.yml`) runs this build
+and deploys `out/` to GitHub Pages. It no longer builds a Flutter web demo —
+this is a desktop client, and `lib/tray_service.dart` / `lib/app_log.dart`
+import `dart:io` directly, which the web compiler rejects. See
+`lib/ca_setup.dart` for the conditional-import pattern the rest of the code
+follows.
 
 ## Hero Asset
 

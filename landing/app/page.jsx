@@ -2,7 +2,6 @@ import {
   BarChart3,
   Clock3,
   Monitor,
-  PlayCircle,
   ShieldCheck,
   UsersRound
 } from "lucide-react";
@@ -15,7 +14,6 @@ const repoUrl = process.env.NEXT_PUBLIC_REPOSITORY_URL || "https://github.com/Ki
 
 const text = {
   navFeatures: { en: "Features", ko: "기능" },
-  navDemo: { en: "Demo", ko: "데모" },
   navReleases: { en: "Releases", ko: "다운로드" },
   navBuild: { en: "Build", ko: "빌드" },
   navNotice: { en: "Notice", ko: "안내" },
@@ -26,14 +24,13 @@ const text = {
     en: "Start subject timers, check today's study time, compare rankings, and browse group activity without opening the mobile app.",
     ko: "과목별 타이머를 켜고, 오늘 공부 시간과 랭킹, 그룹 현황을 데스크톱에서 바로 확인하세요."
   },
-  openDemo: { en: "Open web demo", ko: "웹에서 보기" },
   visualLabel: { en: "Actual Flutter app screen", ko: "앱 화면 미리보기" },
   visualAlt: {
     en: "YPT Desktop Client timer dashboard",
     ko: "열품타 데스크톱 클라이언트 타이머 대시보드"
   },
   statusLinux: { en: "Desktop release assets", ko: "데스크톱 빌드 제공" },
-  statusDemo: { en: "Flutter web demo", ko: "웹 데모 제공" },
+  statusDemo: { en: "Windows desktop app", ko: "Windows 데스크톱 앱" },
   statusJwt: { en: "JWT stored locally", ko: "JWT 로컬 저장" },
   statusRisk: { en: "Undocumented API", ko: "비공식 API 연동" },
   projectStatus: { en: "Project status", ko: "프로젝트 상태" },
@@ -53,11 +50,10 @@ const text = {
   },
   runLocally: { en: "Run locally", ko: "직접 실행" },
   buildHeading: {
-    en: "Build the desktop app, web demo, or landing page",
-    ko: "데스크톱 앱과 웹 데모를 직접 빌드할 수 있습니다"
+    en: "Build the desktop app or the landing page",
+    ko: "데스크톱 앱과 랜딩 페이지를 직접 빌드할 수 있습니다"
   },
   flutterClient: { en: "Flutter client", ko: "Flutter 클라이언트" },
-  flutterDemo: { en: "Flutter web demo", ko: "Flutter 웹 데모" },
   webLanding: { en: "Web landing", ko: "웹 랜딩" },
   importantNotice: { en: "Important notice", ko: "안내" },
   noticeHeading: {
@@ -115,7 +111,6 @@ function I18n({ value }) {
 
 export default function Page() {
   const heroImage = `${basePath}/hero-dashboard.png`;
-  const demoUrl = `${basePath}/demo/`;
   const normalizedRepoUrl = repoUrl.replace(/\/$/, "");
   const releasesUrl = `${normalizedRepoUrl}/releases`;
 
@@ -135,7 +130,6 @@ export default function Page() {
           <div className="navControls">
             <div className="navLinks">
               <a href="#features"><I18n value={text.navFeatures} /></a>
-              <a href={demoUrl}><I18n value={text.navDemo} /></a>
               <a href={releasesUrl}><I18n value={text.navReleases} /></a>
               <a href="#build"><I18n value={text.navBuild} /></a>
               <a href="#notice"><I18n value={text.navNotice} /></a>
@@ -151,10 +145,6 @@ export default function Page() {
             <p className="heroCopy"><I18n value={text.heroCopy} /></p>
             <div className="heroActions">
               <DownloadButton repoUrl={normalizedRepoUrl} />
-              <a className="button secondary" href={demoUrl}>
-                <PlayCircle size={18} />
-                <I18n value={text.openDemo} />
-              </a>
             </div>
           </div>
           <div className="heroVisual">
@@ -228,11 +218,6 @@ export default function Page() {
             <pre><code>{`flutter pub get
 flutter run -d linux
 flutter build linux`}</code></pre>
-          </article>
-          <article>
-            <h3><I18n value={text.flutterDemo} /></h3>
-            <pre><code>{`flutter pub get
-flutter build web --release --base-href /demo/`}</code></pre>
           </article>
           <article>
             <h3><I18n value={text.webLanding} /></h3>

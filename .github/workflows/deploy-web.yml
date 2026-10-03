@@ -1,15 +1,18 @@
-name: Deploy Web
+name: Deploy Landing Page
 
+# 只部署 landing/（Next.js 静态导出），不再构建 Flutter web demo。
+#
+# 原因：本项目是桌面客户端。lib/tray_service.dart 与 lib/app_log.dart
+# 直接 import 'dart:io'，web 编译器不支持（tray_manager / 写 %LOCALAPPDATA%
+# 文件在浏览器里都不存在）。lib/ca_setup.dart 做了条件导入隔离，
+# 那两个文件没有，所以 `flutter build web` 必然失败。
+# 桌面构建由 release.yml 负责，不受此影响。
 on:
   push:
     branches:
       - main
     paths:
       - "landing/**"
-      - "web/**"
-      - "lib/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
       - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
@@ -36,13 +39,6 @@ jobs:
           cache: npm
           cache-dependency-path: landing/package-lock.json
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: 3.47.6
-          cache: true
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6.0.0
 
@@ -55,14 +51,7 @@ jobs:
             base_path="/$repo_name"
           fi
           echo "NEXT_PUBLIC_BASE_PATH=$base_path" >> "$GITHUB_ENV"
-          echo "FLUTTER_WEB_BASE_HREF=$base_path/demo/" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_REPOSITORY_URL=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" >> "$GITHUB_ENV"
-
-      - name: Install Flutter dependencies
-        run: flutter pub get
-
-      - name: Build Flutter web demo
-        run: flutter build web --release --base-href "$FLUTTER_WEB_BASE_HREF"
 
       - name: Install dependencies
         working-directory: landing
@@ -71,11 +60,6 @@ jobs:
       - name: Build landing page
         working-directory: landing
         run: npm run build
-
-      - name: Mount Flutter demo under landing /demo
-        run: |
-          mkdir -p landing/out/demo
-          cp -a build/web/. landing/out/demo/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0
