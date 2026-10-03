@@ -20,7 +20,7 @@ import '../main.dart' show kBrand, kCard, kCard2;
 /// 设计取舍：
 ///  - **不阻塞计时**：点跳过直接开始，用户不该被弹窗挡住学习。
 ///  - **预设优先**：短标签一键选，比让用户打字实际率高得多。
-///  - **跳过多短**：空档不足 1 分钟时问"在做什么"是噪声，直接忽略。
+///  - **跳过过短**：空档不足 15 秒时问"在做什么"是噪声，直接忽略。
 class GapPromptDialog extends StatefulWidget {
   final GapInterval gap;
 
@@ -35,8 +35,10 @@ class GapPromptDialog extends StatefulWidget {
 
   /// 打开"编辑已有空档"的对话框。
   static Future<void> showForEdit(BuildContext context, GapInterval gap) {
-    AppLog.log('gap.edit: 打开编辑 (start=${gap.start}, '
-        'duration=${gap.duration.inSeconds}s, answered=${gap.isAnswered})');
+    AppLog.log(
+      'gap.edit: 打开编辑 (start=${gap.start}, '
+      'duration=${gap.duration.inSeconds}s, answered=${gap.isAnswered})',
+    );
     return showDialog<void>(
       context: context,
       builder: (_) => GapPromptDialog(gap: gap, editing: true),
@@ -59,14 +61,18 @@ class GapPromptDialog extends StatefulWidget {
       return false;
     }
     final ok = isGapLongEnough(gap.duration);
-    AppLog.log('gap.shouldAsk: 已过 ${gap.duration.inSeconds}s '
-        '(阈值 ${minMeaningfulGap.inSeconds}s) -> $ok');
+    AppLog.log(
+      'gap.shouldAsk: 已过 ${gap.duration.inSeconds}s '
+      '(阈值 ${minMeaningfulGap.inSeconds}s) -> $ok',
+    );
     return ok;
   }
 
   /// 便捷入口：需要问就弹，不需要就直接返回。
   static Future<void> maybeShow(BuildContext context, GapInterval? gap) async {
-    AppLog.log('gap.maybeShow: 进入 (gap=${gap == null ? "null" : "${gap.duration.inSeconds}s open=${gap.isOpen}"})');
+    AppLog.log(
+      'gap.maybeShow: 进入 (gap=${gap == null ? "null" : "${gap.duration.inSeconds}s open=${gap.isOpen}"})',
+    );
     if (!shouldAsk(gap)) {
       AppLog.log('gap.maybeShow: 条件不满足，不弹窗');
       return;
@@ -90,6 +96,7 @@ class GapPromptDialog extends StatefulWidget {
 class _GapPromptDialogState extends State<GapPromptDialog> {
   final _text = TextEditingController();
   String? _tag;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -151,8 +158,8 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
                   _TagChip(
                     label: tag,
                     selected: _tag == tag,
-                    onTap: () => setState(
-                        () => _tag = _tag == tag ? null : tag),
+                    onTap: () =>
+                        setState(() => _tag = _tag == tag ? null : tag),
                   ),
               ],
             ),
@@ -189,35 +196,43 @@ class _GapPromptDialogState extends State<GapPromptDialog> {
             await app.discardPendingGap();
             if (context.mounted) Navigator.of(context).pop();
           },
-          child: Text(widget.editing ? '取消' : '跳过',
-              style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
+          child: Text(
+            widget.editing ? '取消' : '跳过',
+            style: const TextStyle(color: Color(0xFF757575), fontSize: 13),
+          ),
         ),
-        // 记录/保存：闭合本地 + 同步 /rest/record
+        // 记录/保存：闭合本地记录。云端休息接口尚未验证。
         TextButton(
-          onPressed: () async {
-            final app = context.read<AppState>();
-            final activity = _text.text.trim();
-            if (widget.editing) {
-              await app.updateGapLabel(
-                widget.gap,
-                tag: _tag,
-                activity: activity.isEmpty ? null : activity,
-              );
-              if (context.mounted) Navigator.of(context).pop();
-              return;
-            }
-            await app.describePendingGap(
-              tag: _tag,
-              activity: activity.isEmpty ? null : activity,
-            );
-            await app.commitPendingGap();
-            if (context.mounted) Navigator.of(context).pop();
-          },
-          child: Text(widget.editing ? '保存' : '记录',
-              style: const TextStyle(
-                  color: kBrand,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+          onPressed: _saving
+              ? null
+              : () async {
+                  setState(() => _saving = true);
+                  final app = context.read<AppState>();
+                  final activity = _text.text.trim();
+                  if (widget.editing) {
+                    await app.updateGapLabel(
+                      widget.gap,
+                      tag: _tag,
+                      activity: activity.isEmpty ? null : activity,
+                    );
+                    if (context.mounted) Navigator.of(context).pop();
+                    return;
+                  }
+                  await app.describePendingGap(
+                    tag: _tag,
+                    activity: activity.isEmpty ? null : activity,
+                  );
+                  await app.commitPendingGap();
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+          child: Text(
+            widget.editing ? '保存' : '记录',
+            style: const TextStyle(
+              color: kBrand,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ],
     );

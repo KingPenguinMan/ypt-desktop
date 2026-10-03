@@ -22,7 +22,8 @@ class AppLog {
 
   static File? _resolveFile() {
     try {
-      final base = Platform.environment['LOCALAPPDATA'] ??
+      final base =
+          Platform.environment['LOCALAPPDATA'] ??
           Platform.environment['TEMP'] ??
           Directory.systemTemp.path;
       final dir = Directory('$base${Platform.pathSeparator}ypt_client');

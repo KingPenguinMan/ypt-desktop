@@ -133,17 +133,18 @@ class _SubjectPieChartState extends State<SubjectPieChart> {
       return SizedBox(
         height: widget.size,
         child: const Center(
-          child: Text('No study data yet',
-              style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
+          child: Text(
+            'No study data yet',
+            style: TextStyle(color: Color(0xFF757575), fontSize: 13),
+          ),
         ),
       );
     }
 
     final active = _activeIndex;
-    final focused =
-        active != null && active >= 0 && active < data.slices.length
-            ? data.slices[active]
-            : null;
+    final focused = active != null && active >= 0 && active < data.slices.length
+        ? data.slices[active]
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,11 +214,7 @@ class _PiePainter extends CustomPainter {
   final int total;
   final int? highlightIndex;
 
-  _PiePainter({
-    required this.slices,
-    required this.total,
-    this.highlightIndex,
-  });
+  _PiePainter({required this.slices, required this.total, this.highlightIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -248,8 +245,8 @@ class _PiePainter extends CustomPainter {
         ..color = isHot
             ? slice.color
             : (highlightIndex == null
-                ? slice.color
-                : slice.color.withValues(alpha: 0.32));
+                  ? slice.color
+                  : slice.color.withValues(alpha: 0.32));
 
       final pad = slices.length > 1 ? gap : 0.0;
       canvas.drawArc(
@@ -387,7 +384,9 @@ class _Legend extends StatelessWidget {
                               fontWeight: activeIndex == i
                                   ? FontWeight.w600
                                   : FontWeight.normal,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
                         ),

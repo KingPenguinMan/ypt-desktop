@@ -247,7 +247,7 @@ echo      the "what were you doing" dialog should appear
 echo   6) open the History tab: calendar heatmap + pie chart
 echo.
 echo Runtime log (release builds have no console output):
-echo   %%LOCALAPPDATA%%\ypt-desktop\ypt.log
+echo   %%LOCALAPPDATA%%\ypt_client\ypt.log
 echo   The tray logs every init step and the result of setVisible.
 echo   If the tray icon does not appear, this file says why.
 echo.

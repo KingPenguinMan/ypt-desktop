@@ -1,5 +1,9 @@
+import 'server_session.dart';
+
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+
 import 'history_models.dart';
 import 'models.dart';
 import 'social_auth.dart';
@@ -21,11 +25,11 @@ class YptApi {
   YptApi({http.Client? client}) : _client = client ?? http.Client();
 
   Map<String, String> _headers({bool auth = true}) => {
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'User-Agent': userAgent, // 실제 앱과 동일 (Dart/3.11 dart:io)
-        if (auth && jwt != null) 'authorization': 'JWT $jwt',
-      };
+    'Content-Type': 'application/json',
+    'Accept-Encoding': 'gzip',
+    'User-Agent': userAgent, // 실제 앱과 동일 (Dart/3.11 dart:io)
+    if (auth && jwt != null) 'authorization': 'JWT $jwt',
+  };
 
   Uri _u(String path) => Uri.parse('$base$path');
 
@@ -36,10 +40,13 @@ class YptApi {
     String path,
     Map<String, Object?> body, {
     bool auth = true,
-  }) =>
-      _client
-          .post(_u(path), headers: _headers(auth: auth), body: jsonEncode(body))
-          .timeout(requestTimeout);
+  }) => _client
+      .post(
+        _u(path),
+        headers: _headers(auth: auth),
+        body: jsonEncode(body),
+      )
+      .timeout(requestTimeout);
 
   Map<String, dynamic> _decodeObject(http.Response r) {
     final decoded = jsonDecode(utf8.decode(r.bodyBytes));
@@ -49,8 +56,18 @@ class YptApi {
   }
 
   void _ensureOk(http.Response r, String endpoint) {
+    if (r.statusCode == 401 || r.statusCode == 403) {
+      throw const YptAuthException('session expired');
+    }
     if (r.statusCode != 200) {
       throw YptApiException('$endpoint HTTP ${r.statusCode}');
+    }
+    final j = _decodeObject(r);
+    if (j['s'] == false) {
+      if (j['c']?.toString() == '108') {
+        throw const YptAuthException('session expired');
+      }
+      throw YptApiException('$endpoint: ${j['c'] ?? 'rejected'}');
     }
   }
 
@@ -60,17 +77,14 @@ class YptApi {
 
   /// POST /user/sign-in-jwt — 이메일 로그인. 성공 시 jwt 저장.
   Future<SignInResult> signIn(String email, String password) async {
-    final r = await _post(
-        '/user/sign-in-jwt',
-        {
-          'email': email,
-          'password': password,
-          'loginProvider': 'Email',
-          'new': true,
-          'getx': true,
-          'language': 'en',
-        },
-        auth: false);
+    final r = await _post('/user/sign-in-jwt', {
+      'email': email,
+      'password': password,
+      'loginProvider': 'Email',
+      'new': true,
+      'getx': true,
+      'language': 'en',
+    }, auth: false);
     if (r.statusCode != 200) return SignInError('http_${r.statusCode}');
     final j = _decodeObject(r);
     if (j['s'] == true) {
@@ -86,18 +100,15 @@ class YptApi {
   /// 실제 앱과 동일 바디: {accessToken, providerId, email, loginProvider, new, getx, version}.
   /// providerId가 신규면 가입, 기존이면 그 계정으로 로그인 (RE: spec/SOCIAL_LOGIN.md).
   Future<SignInResult> socialSignIn(SocialCredential cred) async {
-    final r = await _post(
-        '/user/social/sign-up-jwt',
-        {
-          'accessToken': cred.accessToken,
-          'providerId': cred.providerId,
-          'email': cred.email,
-          'loginProvider': cred.loginProvider,
-          'new': true,
-          'getx': true,
-          'version': 810046,
-        },
-        auth: false);
+    final r = await _post('/user/social/sign-up-jwt', {
+      'accessToken': cred.accessToken,
+      'providerId': cred.providerId,
+      'email': cred.email,
+      'loginProvider': cred.loginProvider,
+      'new': true,
+      'getx': true,
+      'version': 810046,
+    }, auth: false);
     if (r.statusCode != 200) return SignInError('http_${r.statusCode}');
     final j = _decodeObject(r);
     if (j['s'] == true) {
@@ -131,7 +142,8 @@ class YptApi {
   /// GET /logs/my-category-rank — 내 카테고리 등수. 응답 {s, mr}.
   Future<int?> myCategoryRank(int categoryId, int countryId) async {
     final r = await _get(
-        '/logs/my-category-rank?category_id=$categoryId&country_id=$countryId');
+      '/logs/my-category-rank?category_id=$categoryId&country_id=$countryId',
+    );
     _ensureOk(r, 'logs/my-category-rank');
     final j = _decodeObject(r);
     if (j['s'] == true) return intOrNull(j['mr']);
@@ -140,10 +152,16 @@ class YptApi {
 
   /// GET /logs/category/member/ranks — 카테고리 랭킹 멤버 (type=day/week/month).
   /// 응답 {s, ms:[{n,sd,ud,si,...}], tc}. sd=공부ms, n=닉네임, si=studiconID.
-  Future<List<RankMember>> categoryRanks(int categoryId, int countryId,
-      {String type = 'day', int page = 1, required String date}) async {
+  Future<List<RankMember>> categoryRanks(
+    int categoryId,
+    int countryId, {
+    String type = 'day',
+    int page = 1,
+    required String date,
+  }) async {
     final r = await _get(
-        '/logs/category/member/ranks?date=$date&categoryID=$categoryId&countryID=$countryId&page=$page&type=$type');
+      '/logs/category/member/ranks?date=$date&categoryID=$categoryId&countryID=$countryId&page=$page&type=$type',
+    );
     _ensureOk(r, 'logs/category/member/ranks');
     final j = _decodeObject(r);
     final ms = j['ms'] is List ? j['ms'] as List : const [];
@@ -215,29 +233,24 @@ class YptApi {
       if (title != null && title.trim().isNotEmpty) titleByIndex[i] = title;
     }
 
-    final byId = <int, int>{};
-    final byTitle = <String, int>{};
-
-    void merge(SubjectTimeSnapshot snapshot) {
-      for (final entry in snapshot.byId.entries) {
-        byId[entry.key] = (byId[entry.key] ?? 0) + entry.value;
-      }
-      for (final entry in snapshot.byTitle.entries) {
-        byTitle[entry.key] = (byTitle[entry.key] ?? 0) + entry.value;
-      }
-    }
-
-    if (dl is Map<String, dynamic>) {
-      merge(subjectTimeSnapshotFromJson(dl, titleByIndex: titleByIndex));
-    }
-    merge(subjectTimeSnapshotFromJson(j, titleByIndex: titleByIndex));
-    return SubjectTimeSnapshot(byId: byId, byTitle: byTitle);
+    final source = dl is Map<String, dynamic> ? dl : j;
+    final snap = subjectTimeSnapshotFromJson(
+      source,
+      titleByIndex: titleByIndex,
+    );
+    final total = intOrNull(source['sm']);
+    return SubjectTimeSnapshot(
+      byId: snap.byId,
+      byTitle: snap.byTitle,
+      reportedTotalMs: total == null ? null : total + intValue(source['ad']),
+    );
   }
 
   /// GET /group/list-new-2 — 둘러보기(신규) 그룹 목록. 응답 {s, gs:[...]}.
   Future<List<Group>> browseGroups(int countryId, {int page = 1}) async {
     final r = await _get(
-        '/group/list-new-2?category_id=0&order_type=promotedAt&only_available=false&only_open=false&only_cam=false&page=$page&country_id=$countryId&p=true');
+      '/group/list-new-2?category_id=0&order_type=promotedAt&only_available=false&only_open=false&only_cam=false&page=$page&country_id=$countryId&p=true',
+    );
     _ensureOk(r, 'group/list-new-2');
     final j = _decodeObject(r);
     final gs = j['gs'] is List ? j['gs'] as List : const [];
@@ -264,7 +277,8 @@ class YptApi {
   /// GET /logs/group/members/v2 — 그룹 멤버(공부 현황). 응답 {s, ms:[...]}.
   Future<List<GroupMember>> groupMembers(int groupId, int countryId) async {
     final r = await _get(
-        '/logs/group/members/v2?groupID=$groupId&countryID=$countryId&isLooking=true&version=810046');
+      '/logs/group/members/v2?groupID=$groupId&countryID=$countryId&isLooking=true&version=810046',
+    );
     _ensureOk(r, 'logs/group/members/v2');
     final j = _decodeObject(r);
     final ms = j['ms'] is List ? j['ms'] as List : const [];
@@ -275,21 +289,33 @@ class YptApi {
   }
 
   /// POST /study/start — 타이머 시작. 응답에 dayLog 포함.
-  Future<DayLog?> studyStart(String subject, {int? taskId}) async {
-    final r = await _post('/study/start',
-        {'subject': subject, 'deviceModel': deviceModel, 'taskId': taskId});
+  Future<ServerSession?> studyStart(String subject, {int? taskId}) async {
+    final r = await _post('/study/start', {
+      'subject': subject,
+      'deviceModel': deviceModel,
+      'taskId': taskId,
+    });
     _ensureOk(r, 'study/start');
     final j = _decodeObject(r);
-    if (j['s'] == true && j['dl'] is Map<String, dynamic>) {
-      return DayLog.fromJson(j['dl']);
+    if (j['s'] == true) {
+      final session = ServerSession.fromJson(j);
+      if (session?.running == true && session?.startedAtMs != null) {
+        return session;
+      }
+      final start = ServerSession.parseTimestamp(j['st']);
+      return start == null
+          ? null
+          : ServerSession(true, startedAtMs: start, subject: subject);
     }
     throw YptApiException(j['c']?.toString() ?? 'study/start failed');
   }
 
   /// POST /study/stop — 타이머 정지. startedAt=시작 epoch(ms).
   Future<DayLog?> studyStop(int startedAtMs) async {
-    final r = await _post(
-        '/study/stop', {'startedAt': startedAtMs, 'deviceModel': deviceModel});
+    final r = await _post('/study/stop', {
+      'startedAt': startedAtMs,
+      'deviceModel': deviceModel,
+    });
     _ensureOk(r, 'study/stop');
     final j = _decodeObject(r);
     if (j['s'] == true && j['dl'] is Map<String, dynamic>) {
@@ -299,7 +325,9 @@ class YptApi {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 休息记录(rest) — 官方客户端存在完整的"停止计时后询问这段时间在做什么"
+  // 休息记录(rest) — 官方客户端存在完整的"停止计时后询问这段时间在做什么"。
+  // 本客户端只做本地记录：以下方法保留为协议研究占位，业务层不会调用，
+  // 因为仅凭 APK 字符串不能证明请求体和字段语义，不能向生产服务盲写。
   // 功能。端点与字段名由官方 APK(libapp.so, v810.0.85)逆向确认,并已实测
   // 这些端点在生产服务上返回 200(鉴权拦截),不是 404。
   //
@@ -395,10 +423,7 @@ class YptApi {
   /// 官方客户端把标签做成可编辑(`study_rest_tag_title`、
   /// `study_rest_tag_dialog_title` 等 i18n key 表明标签是用户自定义的),
   /// 所以标签集合应当从服务端拉取而非本地硬编码。
-  Future<void> editRestTag({
-    String? original,
-    required String tag,
-  }) async {
+  Future<void> editRestTag({String? original, required String tag}) async {
     final r = await _post('/rest/tags/edit', {
       'original': ?original,
       'tag': tag,
@@ -453,9 +478,13 @@ class YptApi {
     String endDate, {
     String? groupId,
   }) async {
-    final q = StringBuffer('/logs/range/days?start=$startDate&end=$endDate');
-    if (groupId != null) q.write('&groupID=$groupId');
-    final r = await _get(q.toString());
+    // Experimental; disabled by AppState until authenticated fixtures exist.
+    final r = await _post('/logs/range/days', {
+      'startDate': startDate,
+      'endDate': endDate,
+      'isMember': false,
+      'id': ?groupId,
+    });
     if (r.statusCode == 403) {
       throw const YptAuthException('session expired');
     }
@@ -510,8 +539,14 @@ class YptApi {
           if (entry.value is num) ms = (entry.value as num).toInt();
         } else {
           // 같은 컨테이너에서 시간 값을 찾는다.
-          for (final probe
-              in ['sm', 'ms', 'studyMs', 'studyms', 'time', 'total']) {
+          for (final probe in [
+            'sm',
+            'ms',
+            'studyMs',
+            'studyms',
+            'time',
+            'total',
+          ]) {
             final v2 = c[probe];
             if (v2 is num) {
               ms = v2.toInt();
@@ -538,8 +573,10 @@ class YptApi {
   static String? _parseLooseDate(Object? value) {
     if (value is int) {
       final ms = value > 9999999999 ? value : value * 1000;
-      final d = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true)
-          .add(const Duration(hours: 9));
+      final d = DateTime.fromMillisecondsSinceEpoch(
+        ms,
+        isUtc: true,
+      ).add(const Duration(hours: 9));
       return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     }
     if (value is! String) return null;

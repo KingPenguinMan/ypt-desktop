@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../models.dart';
 import '../main.dart' show kBrand, kCard;
@@ -48,37 +49,55 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-                color: kCard, borderRadius: BorderRadius.circular(16)),
+              color: kCard,
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Row(
               children: [
                 Container(
                   width: 54,
                   height: 54,
                   decoration: BoxDecoration(
-                      color: kBrand.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14)),
-                  child: const Icon(Icons.groups_rounded,
-                      color: kBrand, size: 28),
+                    color: kBrand.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.groups_rounded,
+                    color: kBrand,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(g.title,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(
+                        g.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       if (g.slogan.isNotEmpty)
-                        Text(g.slogan,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: Color(0xFFBDBDBD), fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text('${g.category} · ${g.memberCount} members · owner ${g.owner}',
+                        Text(
+                          g.slogan,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              color: Color(0xFF9E9E9E), fontSize: 11)),
+                            color: Color(0xFFBDBDBD),
+                            fontSize: 12,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${g.category} · ${g.memberCount} members · owner ${g.owner}',
+                        style: TextStyle(
+                          color: Color(0xFF9E9E9E),
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -89,8 +108,7 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Text('Members',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('Members', style: TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -109,8 +127,10 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Could not load members',
-                              style: TextStyle(color: Colors.redAccent)),
+                          const Text(
+                            'Could not load members',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
                             onPressed: _reload,
@@ -126,8 +146,11 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                   ..sort((a, b) => b.studyMs.compareTo(a.studyMs));
                 if (members.isEmpty) {
                   return Center(
-                      child: Text('No members visible (private group)',
-                          style: TextStyle(color: Color(0xFF757575))));
+                    child: Text(
+                      'No members visible (private group)',
+                      style: TextStyle(color: Color(0xFF757575)),
+                    ),
+                  );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -142,10 +165,11 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                           CircleAvatar(
                             backgroundColor: kBrand.withValues(alpha: 0.2),
                             child: Text(
-                                m.nickname.isNotEmpty
-                                    ? m.nickname.characters.first
-                                    : '?',
-                                style: const TextStyle(color: kBrand)),
+                              m.nickname.isNotEmpty
+                                  ? m.nickname.characters.first
+                                  : '?',
+                              style: const TextStyle(color: kBrand),
+                            ),
                           ),
                           if (m.studying)
                             Positioned(
@@ -157,22 +181,34 @@ class _GroupRoomScreenState extends State<GroupRoomScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.greenAccent,
                                   shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: const Color(0xFF0D0D0F), width: 2),
+                                  border: Border.all(
+                                    color: const Color(0xFF0D0D0F),
+                                    width: 2,
+                                  ),
                                 ),
                               ),
                             ),
                         ],
                       ),
-                      title: Text(m.nickname,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(m.category,
-                          style: TextStyle(
-                              color: Color(0xFF757575), fontSize: 12)),
-                      trailing: Text(fmtMs(m.studyMs),
-                          style: const TextStyle(
-                              color: Colors.grey,
-                              fontFeatures: [FontFeature.tabularFigures()])),
+                      title: Text(
+                        m.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        m.category,
+                        style: TextStyle(
+                          color: Color(0xFF757575),
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: Text(
+                        fmtMs(m.studyMs),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
                     );
                   },
                 );

@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'hourglass_frames.dart';
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -42,6 +46,46 @@ class TrayService {
   TrayIcon? _icon;
   bool _ready = false;
   bool _quitting = false;
+  bool _disposed = false;
+  final List<Image> _frames = [];
+  Timer? _animation;
+  int _frame = 0;
+  _WindowEvents? _windowEvents;
+
+  Future<void> _loadAnimation() async {
+    try {
+      final encoded = await buildHourglassFrames();
+      if (_disposed) return;
+      for (final png in encoded) {
+        final image = Image.fromBase64(png);
+        if (image != null) _frames.add(image);
+      }
+      _syncAnimation();
+    } catch (e, st) {
+      AppLog.error('tray animation', e, st);
+    }
+  }
+
+  void _syncAnimation() {
+    if (!_ready || _frames.isEmpty || _disposed) return;
+    final running = _app.studying && !_app.timerUncertain;
+    if (!running) {
+      _animation?.cancel();
+      _animation = null;
+      _frame = 0;
+      _icon?.icon = _frames.first;
+      return;
+    }
+    _animation ??= Timer.periodic(const Duration(milliseconds: 150), (_) {
+      try {
+        _frame = (_frame + 1) % _frames.length;
+        _icon?.icon = _frames[_frame];
+      } catch (e) {
+        _animation?.cancel();
+        _animation = null;
+      }
+    });
+  }
 
   /// 状态行菜单项。保留引用是为了秒级刷新时只改它的 label，
   /// 而不是重建整棵菜单。
@@ -102,13 +146,15 @@ class TrayService {
       _setupTray();
       if (_icon != null) {
         await windowManager.setPreventClose(true);
-        windowManager.addListener(_WindowEvents(this));
+        _windowEvents = _WindowEvents(this);
+        windowManager.addListener(_windowEvents!);
         AppLog.step('setPreventClose', 'true（关闭按钮改为隐藏到托盘）');
       } else {
         // 退化：关闭按钮就是退出。计时快照已落盘，下次启动会恢复。
         AppLog.log('tray.init: 托盘不可用，关闭按钮保持"退出应用"行为');
       }
       _ready = true;
+      unawaited(_loadAnimation());
       AppLog.log('tray.init: done (icon=${_icon != null}, ready=$_ready)');
     } catch (e, st) {
       AppLog.error('tray.init', e, st);
@@ -179,8 +225,7 @@ class TrayService {
       // 之前正是漏了这一步：setContextMenu 一直返回 ok，日志看起来一切正常，
       // 但点右键什么都不发生。
       icon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
-      AppLog.step('setContextMenuTrigger',
-          '${icon.getContextMenuTrigger()}');
+      AppLog.step('setContextMenuTrigger', '${icon.getContextMenuTrigger()}');
     } catch (e, st) {
       // 失败就把 native handle 还回去，并保持 _icon 为 null。
       AppLog.error('_setupTray 中途失败', e, st);
@@ -199,7 +244,11 @@ class TrayService {
     } catch (e, st) {
       AppLog.error('_rebuildMenu 失败（不影响图标显示）', e, st);
     }
-    final visible = icon.setVisible(true); // 再显示
+    final visible = icon.setVisible(true);
+    if (!visible) {
+      icon.dispose();
+      _icon = null;
+    } // 再显示
     // setVisible 返回 bool —— 这是判断图标到底有没有显示出来的关键证据。
     AppLog.step('setVisible(true)', visible);
     AppLog.log('_setupTray: 完成 (可见=$visible)');
@@ -215,11 +264,12 @@ class TrayService {
         .take(12)
         .map((s) => '${s.id}:${s.title}')
         .join(',');
-    return '${st.studying}|$subjects|${st.hasPendingGap && st.pendingGap!.isOpen}';
+    return '${st.studying}|${st.timerLoading}|${st.timerUncertain}|$subjects|${st.hasPendingGap && st.pendingGap!.isOpen}';
   }
 
   String _statusLabel() {
     final st = _app;
+    if (st.timerUncertain) return '计时状态待确认 · 请打开窗口刷新';
     if (st.studying) {
       return '${st.activeSubject?.title ?? 'Studying'}  ${_hms(st.elapsed)}';
     }
@@ -265,6 +315,7 @@ class TrayService {
   void sync() {
     if (!_ready) return;
     try {
+      _syncAnimation();
       final sig = _structureSignature();
       if (sig == _menuSignature) {
         // 结构没变，但状态文字可能变了（比如刚停止计时）。
@@ -311,6 +362,7 @@ class TrayService {
     if (st.studying) {
       final stop = MenuItem.createWithLabelAndType('Stop', MenuItemType.normal);
       if (stop != null) {
+        stop.isEnabled = !st.timerLoading;
         _bindMenu(stop, () => st.stopTimer());
         menu.addItem(stop);
       }
@@ -321,9 +373,12 @@ class TrayService {
         final submenu = Menu.create();
         if (submenu != null) {
           for (final s in subjects.take(12)) {
-            final item =
-                MenuItem.createWithLabelAndType(s.title, MenuItemType.normal);
+            final item = MenuItem.createWithLabelAndType(
+              s.title,
+              MenuItemType.normal,
+            );
             if (item == null) continue;
+            item.isEnabled = !st.timerLoading;
             _bindMenu(item, () => st.startTimer(s));
             submenu.addItem(item);
           }
@@ -352,15 +407,19 @@ class TrayService {
     }
 
     menu.addSeparator();
-    final showItem =
-        MenuItem.createWithLabelAndType('Show window', MenuItemType.normal);
+    final showItem = MenuItem.createWithLabelAndType(
+      'Show window',
+      MenuItemType.normal,
+    );
     if (showItem != null) {
       _bindMenu(showItem, _showWindow);
       menu.addItem(showItem);
     }
 
-    final quitItem =
-        MenuItem.createWithLabelAndType('Quit YPT', MenuItemType.normal);
+    final quitItem = MenuItem.createWithLabelAndType(
+      'Quit YPT',
+      MenuItemType.normal,
+    );
     if (quitItem != null) {
       _bindMenu(quitItem, () {
         _quitting = true;
@@ -396,12 +455,13 @@ class TrayService {
   }
 
   Future<void> _quit() async {
-    // 退出前必须停掉服务端会话，否则用户账号会一直累计时长。
-    try {
-      await _app.stopTimer(silent: true);
-    } catch (e) {
-      debugPrint('stop before quit failed: $e');
+    final stopped = await _app.stopTimerAndReport(silent: true);
+    if (!stopped) {
+      _quitting = false;
+      _showWindow();
+      return;
     }
+    dispose();
     await windowManager.destroy();
   }
 
@@ -414,12 +474,20 @@ class TrayService {
   }
 
   void dispose() {
+    _disposed = true;
+    _animation?.cancel();
+    if (_windowEvents != null) windowManager.removeListener(_windowEvents!);
+    _windowEvents = null;
     _trayListener = null;
     _menuListeners.clear();
     _statusItem = null;
     _menuSignature = null;
     _icon?.dispose();
     _icon = null;
+    for (final frame in _frames) {
+      frame.dispose();
+    }
+    _frames.clear();
     _ready = false;
   }
 }
@@ -432,6 +500,11 @@ class _WindowEvents extends WindowListener {
   _WindowEvents(this._tray);
 
   final TrayService _tray;
+
+  @override
+  void onWindowFocus() {
+    if (_tray._app.loggedIn) unawaited(_tray._app.reconcileTimer());
+  }
 
   @override
   void onWindowClose() {

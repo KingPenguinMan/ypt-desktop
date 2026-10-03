@@ -94,8 +94,12 @@ class SubjectBreakdown {
   /// 取占比最高的前 n 个科目，其余合并为"其他"。
   ///
   /// 扇形图超过 5 段就读不出信息了，所以必须折叠尾部。
-  static SubjectBreakdown from(Map<String, int> byTitle, List<Subject> subjects,
-      {int maxSlices = 5, Color Function(String title)? colorOf}) {
+  static SubjectBreakdown from(
+    Map<String, int> byTitle,
+    List<Subject> subjects, {
+    int maxSlices = 5,
+    Color Function(String title)? colorOf,
+  }) {
     if (byTitle.isEmpty) return empty;
 
     final resolved = <MapEntry<String, int>>[];
@@ -118,8 +122,7 @@ class SubjectBreakdown {
     }
 
     final head = resolved.take(maxSlices - 1).toList();
-    final tailMs =
-        resolved.skip(maxSlices - 1).fold(0, (a, b) => a + b.value);
+    final tailMs = resolved.skip(maxSlices - 1).fold(0, (a, b) => a + b.value);
     return SubjectBreakdown(
       slices: [
         for (final e in head)
@@ -157,7 +160,9 @@ class SubjectBreakdown {
 
 /// 把科目表与时间快照合成扇形图数据。
 SubjectBreakdown buildBreakdown(
-    Map<String, int> byTitle, List<Subject> subjects) {
+  Map<String, int> byTitle,
+  List<Subject> subjects,
+) {
   return SubjectBreakdown.from(
     byTitle,
     subjects,

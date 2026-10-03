@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../main.dart' show kBrand, kCard, kCard2;
 import '../models.dart';
@@ -43,6 +45,12 @@ class TimerView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
+        if (st.timerUncertain)
+          TextButton.icon(
+            onPressed: st.timerLoading ? null : st.reconcileTimer,
+            icon: const Icon(Icons.sync),
+            label: const Text('同步计时状态'),
+          ),
         if (st.studying)
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -50,7 +58,8 @@ class TimerView extends StatelessWidget {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 12),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30)),
+                borderRadius: BorderRadius.circular(30),
+              ),
             ),
             onPressed: st.timerLoading
                 ? null
@@ -60,12 +69,15 @@ class TimerView extends StatelessWidget {
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.stop_rounded),
-            label: const Text('STOP',
-                style:
-                    TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            label: const Text(
+              'STOP',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+            ),
           )
         else
           const SizedBox(height: 44),
@@ -90,9 +102,13 @@ class TimerView extends StatelessWidget {
                       : Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('No subjects loaded',
-                                style: TextStyle(
-                                    color: Color(0xFF757575), fontSize: 13)),
+                            Text(
+                              'No subjects loaded',
+                              style: TextStyle(
+                                color: Color(0xFF757575),
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
                               onPressed: () =>
@@ -102,9 +118,11 @@ class TimerView extends StatelessWidget {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: kBrand,
                                 side: BorderSide(
-                                    color: kBrand.withValues(alpha: 0.5)),
+                                  color: kBrand.withValues(alpha: 0.5),
+                                ),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
                           ],
@@ -114,7 +132,8 @@ class TimerView extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: user.subjects.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _SubjectCard(subject: user.subjects[i]),
+                  itemBuilder: (_, i) =>
+                      _SubjectCard(subject: user.subjects[i]),
                 ),
         ),
       ],
@@ -198,7 +217,10 @@ class _RingTimerState extends State<_RingTimer> {
             const SizedBox(height: 8),
             if (title != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: widget.color.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(20),
@@ -245,12 +267,12 @@ class _SubjectCard extends StatelessWidget {
       // 开始计时前，若上一段空档够长就先问"这段时间在做什么"。
       //
       // 必须在这里问，不能像之前那样在停止时问：空档从"停止那一刻"开始
-      // 累积，停止后立刻弹窗时它还是 0 秒，永远达不到 1 分钟阈值，
+      // 累积，停止后立刻弹窗时它还是 0 秒，永远达不到最短阈值，
       // 弹窗因此从不出现（这是上一版的逻辑自相矛盾）。
       // 等到用户再次开始时，空档已经真实累积，阈值判断才有意义。
       if (GapPromptDialog.shouldAsk(app.pendingGap)) {
         GapPromptDialog.maybeShow(context, app.pendingGap).then((_) {
-          app.startTimer(s);
+          if (context.mounted && app.loggedIn) app.startTimer(s);
         });
       } else {
         app.startTimer(s);
@@ -271,7 +293,9 @@ class _SubjectCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               border: active
                   ? Border.all(
-                      color: s.color.withValues(alpha: 0.6), width: 1.4)
+                      color: s.color.withValues(alpha: 0.6),
+                      width: 1.4,
+                    )
                   : null,
             ),
             child: Row(
@@ -280,33 +304,37 @@ class _SubjectCard extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                      color: s.color.withValues(alpha: 0.18),
-                      shape: BoxShape.circle),
+                    color: s.color.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(
-                      active ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: s.color,
-                      size: 26),
+                    active ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: s.color,
+                    size: 26,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(s.title,
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight:
-                              active ? FontWeight.bold : FontWeight.w500)),
+                  child: Text(
+                    s.title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: active ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
                 ),
                 // 활성화된 과목 하나만 초 단위로 갱신한다. 과목 카드 전체를
                 // 매초 리빌드하면 리스트 길이에 비례해 비용이 늘어난다.
                 if (active)
-                  _ActiveSubjectTime(
-                    baseMs: today,
-                    color: s.color,
-                  )
+                  _ActiveSubjectTime(baseMs: today, color: s.color)
                 else
-                  Text(fmtMs(today),
-                      style: const TextStyle(
-                          color: Colors.grey,
-                          fontFeatures: [FontFeature.tabularFigures()])),
+                  Text(
+                    fmtMs(today),
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -374,12 +402,18 @@ class _RingPainter extends CustomPainter {
 
     if (progress > 0) {
       final arc = Paint()
-        ..color = color // 단색 (그라데이션 제거)
+        ..color =
+            color // 단색 (그라데이션 제거)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 12
         ..strokeCap = StrokeCap.round;
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
-          -math.pi / 2, 2 * math.pi * progress, false, arc);
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        2 * math.pi * progress,
+        false,
+        arc,
+      );
     } else {
       final dot = Paint()..color = color.withValues(alpha: 0.4);
       canvas.drawCircle(Offset(center.dx, center.dy - radius), 5, dot);

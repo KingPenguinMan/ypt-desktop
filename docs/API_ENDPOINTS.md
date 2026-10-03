@@ -46,11 +46,11 @@ paths = {s.decode() for s in strs
 | `POST /study/planner/finish` | 完成番茄钟 | ❌ |
 | `POST /study/study-plan/rest` | 学习计划里的休息 | ❌ |
 | `POST /study/study-plan/update-order` | 计划排序 | ❌ |
-| `POST /rest/record` | **记录休息（"在做什么"）** | ✅ 已用 |
-| `POST /rest/add` | 补记休息 | ✅ 已用 |
-| `POST /rest/edit` | 修改休息 | ✅ 已用 |
-| `POST /rest/delete` | 删除休息 | ✅ 已用 |
-| `POST /rest/tags/edit` | 休息标签管理 | ✅ 已用 |
+| `POST /rest/record` | **记录休息（"在做什么"）** | ⚠️ 路径已发现，协议未验证，当前不上传 |
+| `POST /rest/add` | 补记休息 | ⚠️ 当前不上传 |
+| `POST /rest/edit` | 修改休息 | ⚠️ 当前不上传 |
+| `POST /rest/delete` | 删除休息 | ⚠️ 当前不上传 |
+| `POST /rest/tags/edit` | 休息标签管理 | ⚠️ 当前不上传 |
 
 ### 休息记录字段（二进制确认）
 

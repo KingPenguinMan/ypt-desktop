@@ -49,9 +49,10 @@ class _HistoryViewState extends State<HistoryView> {
         children: [
           Row(
             children: [
-              const Text('Activity history',
-                  style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                'Activity history',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const Spacer(),
               if (st.historyLoading)
                 const SizedBox(
@@ -68,8 +69,10 @@ class _HistoryViewState extends State<HistoryView> {
           ),
           const SizedBox(height: 16),
           if (st.historyErrorText != null) ...[
-            Text(st.historyErrorText!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+            Text(
+              st.historyErrorText!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
             const SizedBox(height: 8),
           ],
 
@@ -81,9 +84,10 @@ class _HistoryViewState extends State<HistoryView> {
           ],
           if (st.gapSyncErrorText != null) ...[
             const SizedBox(height: 8),
-            Text(st.gapSyncErrorText!,
-                style:
-                    const TextStyle(color: Colors.redAccent, fontSize: 11)),
+            Text(
+              st.gapSyncErrorText!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+            ),
           ],
 
           // ── 日历热力图 ──
@@ -104,12 +108,15 @@ class _HistoryViewState extends State<HistoryView> {
                 ),
                 if (selected != null) ...[
                   const SizedBox(height: 6),
-                  SelectedDayCard(
-                    date: selected,
-                    total: st.history[selected] ?? Duration.zero,
-                    byTitle: st.historySubjects[selected] ?? const {},
-                    onClose: () => st.selectDate(todayKey),
-                  ),
+                  if (st.selectedDateLoading) const LinearProgressIndicator(),
+                  if (st.selectedDateError != null) Text(st.selectedDateError!),
+                  if (!st.selectedDateLoading && st.selectedDateError == null)
+                    SelectedDayCard(
+                      date: selected,
+                      total: st.history[selected] ?? Duration.zero,
+                      byTitle: st.historySubjects[selected] ?? const {},
+                      onClose: () => st.selectDate(todayKey),
+                    ),
                 ],
               ],
             ),
@@ -117,8 +124,12 @@ class _HistoryViewState extends State<HistoryView> {
           const SizedBox(height: 20),
 
           // ── 扇形图：今天各科目占比 ──
-          const Text('Today by subject',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            selected == null || selected == todayKey
+                ? '今日科目占比'
+                : '$selected 科目占比',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(14),
@@ -128,7 +139,9 @@ class _HistoryViewState extends State<HistoryView> {
             ),
             child: SubjectPieChart(
               data: buildBreakdown(
-                st.subjectTimes,
+                selected == null || selected == todayKey
+                    ? st.subjectTimes
+                    : st.historySubjects[selected] ?? const {},
                 st.user?.subjects ?? const [],
               ),
               size: 170,
@@ -173,8 +186,10 @@ class _PendingGapBanner extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => GapPromptDialog.maybeShow(context, gap),
-            child: const Text('补录',
-                style: TextStyle(color: kBrand, fontSize: 12)),
+            child: const Text(
+              '补录',
+              style: TextStyle(color: kBrand, fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -184,8 +199,7 @@ class _PendingGapBanner extends StatelessWidget {
 
 /// 空档自述记录列表。
 ///
-/// 这是"记录不在计时的时间在做什么"的复盘入口。数据是纯本地的（服务端
-/// 没有对应端点，详见 ypt_api_probe_report.md）。
+/// Account-scoped local records; cloud contracts are not yet verified.
 class _GapSection extends StatefulWidget {
   const _GapSection();
 
@@ -197,6 +211,20 @@ class _GapSectionState extends State<_GapSection> {
   List<GapInterval> _entries = [];
   Duration _total = Duration.zero;
   bool _loading = true;
+  int _revision = -1;
+  int _request = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final revision = context.watch<AppState>().gapRevision;
+    if (_revision != revision) {
+      _revision = revision;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -205,10 +233,11 @@ class _GapSectionState extends State<_GapSection> {
   }
 
   Future<void> _load() async {
+    final request = ++_request;
     final app = context.read<AppState>();
     final entries = await app.gapEntries();
     final total = await app.gapDuration();
-    if (!mounted) return;
+    if (!mounted || request != _request) return;
     setState(() {
       _entries = entries;
       _total = total;
@@ -223,17 +252,21 @@ class _GapSectionState extends State<_GapSection> {
       children: [
         Row(
           children: [
-            const Text('Untimed time',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Untimed time',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const Spacer(),
             if (_total > Duration.zero)
-              Text('today ${_fmtDur(_total)}',
-                  style: const TextStyle(fontSize: 12, color: kBrand)),
+              Text(
+                'today ${_fmtDur(_total)}',
+                style: const TextStyle(fontSize: 12, color: kBrand),
+              ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
-          'Gaps between study sessions, and what you said you were doing.',
+          '今日空档 · 仅保存在本机（云端接口待验证）',
           style: TextStyle(color: Color(0xFF757575), fontSize: 11),
         ),
         const SizedBox(height: 10),
@@ -254,12 +287,16 @@ class _GapSectionState extends State<_GapSection> {
             ),
             child: Column(
               children: [
-                const Icon(Icons.self_improvement,
-                    size: 22, color: Color(0xFF757575)),
+                const Icon(
+                  Icons.self_improvement,
+                  size: 22,
+                  color: Color(0xFF757575),
+                ),
                 const SizedBox(height: 8),
-                const Text('No gaps recorded today',
-                    style:
-                        TextStyle(fontSize: 13, color: Color(0xFF757575))),
+                const Text(
+                  'No gaps recorded today',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF757575)),
+                ),
                 const SizedBox(height: 4),
                 const Text(
                   'Stop the timer, wait a bit, then start again — you\'ll be asked what you did in between.',
@@ -278,9 +315,10 @@ class _GapSectionState extends State<_GapSection> {
           if (_entries.length > 12)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('…另有 ${_entries.length - 12} 条',
-                  style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF757575))),
+              child: Text(
+                '…另有 ${_entries.length - 12} 条',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF757575)),
+              ),
             ),
         ],
       ],
@@ -290,6 +328,7 @@ class _GapSectionState extends State<_GapSection> {
 
 class _GapRow extends StatelessWidget {
   final GapInterval entry;
+
   /// 删除成功后通知父级刷新列表。
   ///
   /// 不能在这里直接调父级的 _load——_GapRow 是独立类，拿不到
@@ -351,16 +390,21 @@ class _GapRow extends StatelessWidget {
                     if (tag != null) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: kBrand.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(tag,
-                            style: const TextStyle(
-                                fontSize: 11,
-                                color: kBrand,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: kBrand,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 6),
                     ],
@@ -382,8 +426,10 @@ class _GapRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   '${_hm(start)} · ${_fmtDur(dur)}',
-                  style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF9E9E9E),
+                  ),
                 ),
               ],
             ),
@@ -395,7 +441,8 @@ class _GapRow extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8),
             icon: const Icon(Icons.delete_outline, color: Colors.grey),
             tooltip: 'Delete',
-            onPressed: () => _confirmDelete(context, entry),          ),
+            onPressed: () => _confirmDelete(context, entry),
+          ),
         ],
       ),
     );

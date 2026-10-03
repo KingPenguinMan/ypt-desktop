@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'app_log.dart';
 import 'app_state.dart';
 import 'ca_setup.dart';
@@ -128,14 +129,17 @@ class _YptAppState extends State<YptApp> {
         cardTheme: CardThemeData(
           color: kCard,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           margin: EdgeInsets.zero,
         ),
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: kCard,
           indicatorColor: kBrand.withValues(alpha: 0.18),
           labelTextStyle: WidgetStateProperty.all(
-              const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
@@ -157,4 +161,3 @@ class _YptAppState extends State<YptApp> {
     );
   }
 }
-

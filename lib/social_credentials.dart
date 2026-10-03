@@ -28,8 +28,9 @@ class SocialCredentials {
   static const String naverClientId = String.fromEnvironment('NAVER_CLIENT_ID');
 
   /// Naver OAuth client secret。
-  static const String naverClientSecret =
-      String.fromEnvironment('NAVER_CLIENT_SECRET');
+  static const String naverClientSecret = String.fromEnvironment(
+    'NAVER_CLIENT_SECRET',
+  );
 
   /// 三项是否都已注入。
   ///

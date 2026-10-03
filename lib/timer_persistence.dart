@@ -30,11 +30,11 @@ class TimerSnapshot {
   });
 
   Map<String, dynamic> toJson() => {
-        'startedAt': startedAtMs,
-        'subjectId': subjectId,
-        'title': subjectTitle,
-        'color': subjectColor,
-      };
+    'startedAt': startedAtMs,
+    'subjectId': subjectId,
+    'title': subjectTitle,
+    'color': subjectColor,
+  };
 
   /// 解析失败返回 null——宁可当作"没有快照"，也不要用半截数据去 stop 一个
   /// 错误的时间戳，那样会污染服务端记录。
@@ -63,7 +63,9 @@ class TimerSnapshot {
 /// 单独成一个类而不是塞进 [AppState]，是为了让"存什么"这件事有唯一出口，
 /// 方便以后加"空档自述"记录时复用同一套读写。
 class TimerPersistence {
-  static const String _key = 'active_timer_v1';
+  final String accountKey;
+  TimerPersistence(this.accountKey);
+  String get _key => 'active_timer_v2_$accountKey';
 
   Future<void> save(TimerSnapshot snapshot) async {
     final sp = await SharedPreferences.getInstance();

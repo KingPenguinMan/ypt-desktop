@@ -1,3 +1,5 @@
+import 'server_session.dart';
+
 import 'package:flutter/material.dart';
 
 /// YPT API 응답 모델. 키 해독은 RE 스펙(key_dictionary) 기반.
@@ -28,8 +30,11 @@ String? firstStringValue(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
-int firstIntValue(Map<String, dynamic> json, List<String> keys,
-    {int fallback = 0}) {
+int firstIntValue(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  int fallback = 0,
+}) {
   for (final key in keys) {
     final value = intOrNull(json[key]);
     if (value != null) return value;
@@ -73,14 +78,19 @@ SubjectTimeSnapshot subjectTimeSnapshotFromJson(
     }
   }
 
-  addEntries(json['ls']);
-  addEntries(json['ss']);
-  addEntries(json['ts']);
+  // These are alternative response shapes, not additive totals.
+  for (final key in ['ls', 'ss', 'ts']) {
+    if (json[key] is List) {
+      addEntries(json[key]);
+      break;
+    }
+  }
   return SubjectTimeSnapshot(byId: byId, byTitle: byTitle);
 }
 
 int? _subjectIdFromLog(Map<String, dynamic> json) {
-  final direct = intOrNull(json['si']) ??
+  final direct =
+      intOrNull(json['si']) ??
       intOrNull(json['sid']) ??
       intOrNull(json['subjectId']) ??
       intOrNull(json['subjectID']) ??
@@ -105,7 +115,8 @@ String? _subjectTitleFromLog(
   if (direct != null && direct.trim().isNotEmpty) return direct;
   final sb = json['sb'];
   if (sb is String && sb.trim().isNotEmpty) return sb;
-  final index = intOrNull(json['sbi']) ??
+  final index =
+      intOrNull(json['sbi']) ??
       intOrNull(json['subjectIndex']) ??
       intOrNull(json['subjectBookIndex']) ??
       intOrNull(sb);
@@ -169,38 +180,33 @@ class Subject {
   });
 
   factory Subject.fromJson(Map<String, dynamic> j) => Subject(
-        id: firstIntValue(j, const [
-          'id',
-          'sid',
-          'subjectId',
-          'subjectID',
-          'si',
-        ]),
-        title: firstStringValue(j, const [
-              'tt',
-              't',
-              'title',
-              'subject',
-              'subjectName',
-              'subjectTitle',
-            ]) ??
-            '',
-        studyMs: firstIntValue(j, const [
-          'sm',
-          'studyMs',
-          'studyMS',
-          'studyTime',
-          'todayStudyMs',
-          'todayStudyMS',
-          'todayStudyTime',
-          'todayMs',
-          'totalStudyMs',
-          'ms',
-        ]),
-        order: intValue(j['or']),
-        colorValue: firstIntValue(j, const ['co', 'c'], fallback: 0xFF888888),
-        archived: boolValue(j['dl']),
-      );
+    id: firstIntValue(j, const ['id', 'sid', 'subjectId', 'subjectID', 'si']),
+    title:
+        firstStringValue(j, const [
+          'tt',
+          't',
+          'title',
+          'subject',
+          'subjectName',
+          'subjectTitle',
+        ]) ??
+        '',
+    studyMs: firstIntValue(j, const [
+      'sm',
+      'studyMs',
+      'studyMS',
+      'studyTime',
+      'todayStudyMs',
+      'todayStudyMS',
+      'todayStudyTime',
+      'todayMs',
+      'totalStudyMs',
+      'ms',
+    ]),
+    order: intValue(j['or']),
+    colorValue: firstIntValue(j, const ['co', 'c'], fallback: 0xFF888888),
+    archived: boolValue(j['dl']),
+  );
 
   Color get color => Color(colorValue == 0 ? 0xFF888888 : colorValue);
 }
@@ -223,20 +229,27 @@ class DayLog {
   });
 
   factory DayLog.fromJson(Map<String, dynamic> j) => DayLog(
-        studyMs: intValue(j['sm']),
-        restMs: intValue(j['rm']),
-        maxStudyMs: intValue(j['mm']),
-        addedMs: intValue(j['ad']),
-        date: stringValue(j['dt']),
-        subjectTimes: subjectTimeSnapshotFromJson(j),
-      );
+    studyMs: intValue(j['sm']),
+    restMs: intValue(j['rm']),
+    maxStudyMs: intValue(j['mm']),
+    addedMs: intValue(j['ad']),
+    date: stringValue(j['dt']),
+    subjectTimes: subjectTimeSnapshotFromJson(j),
+  );
 }
 
 class SubjectTimeSnapshot {
+  final int? reportedTotalMs;
+  int get totalMs =>
+      reportedTotalMs ??
+      (byTitle.isNotEmpty
+          ? byTitle.values.fold<int>(0, (a, b) => a + b)
+          : byId.values.fold<int>(0, (a, b) => a + b));
   final Map<int, int> byId;
   final Map<String, int> byTitle;
 
   const SubjectTimeSnapshot({
+    this.reportedTotalMs,
     this.byId = const {},
     this.byTitle = const {},
   });
@@ -244,6 +257,8 @@ class SubjectTimeSnapshot {
 
 /// 로그인/리로드 응답 묶음 (sign-in-jwt, reload/info 공통 구조)
 class UserData {
+  final String? accountId;
+  final ServerSession? session;
   final String? jwt; // jwt (로그인 시에만)
   final String nickname; // n
   final String category; // ct (예: HS11)
@@ -254,6 +269,8 @@ class UserData {
   final int countryId; // coid
 
   UserData({
+    this.accountId,
+    this.session,
     this.jwt,
     required this.nickname,
     required this.category,
@@ -266,15 +283,20 @@ class UserData {
 
   factory UserData.fromJson(Map<String, dynamic> j) {
     final ssList = j['ss'] is List ? j['ss'] as List : const [];
-    final subjects = ssList
-        .whereType<Map<String, dynamic>>()
-        .map(Subject.fromJson)
-        .where((s) => !s.archived)
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final subjects =
+        ssList
+            .whereType<Map<String, dynamic>>()
+            .map(Subject.fromJson)
+            .where((s) => !s.archived)
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
     DayLog? dl;
     if (j['dl'] is Map<String, dynamic>) dl = DayLog.fromJson(j['dl']);
+    final profile = j['p'] is Map ? j['p'] as Map : const {};
+    final id = profile['ud'] ?? profile['id'] ?? j['ud'] ?? j['id'];
     return UserData(
+      accountId: id?.toString(),
+      session: ServerSession.fromJson(j),
       jwt: j['jwt'] == null ? null : stringValue(j['jwt']),
       nickname: stringValue(j['n']),
       category: stringValue(j['ct']),
@@ -334,13 +356,13 @@ class Group {
   });
 
   factory Group.fromJson(Map<String, dynamic> j) => Group(
-        id: intValue(j['id'] ?? j['gd']), // groupID = id (멤버 API가 쓰는 값)
-        title: stringValue(j['t']),
-        category: stringValue(j['c']),
-        owner: stringValue(j['on']),
-        slogan: stringValue(j['sn']),
-        memberCount: intValue(j['mc']),
-      );
+    id: intValue(j['id'] ?? j['gd']), // groupID = id (멤버 API가 쓰는 값)
+    title: stringValue(j['t']),
+    category: stringValue(j['c']),
+    owner: stringValue(j['on']),
+    slogan: stringValue(j['sn']),
+    memberCount: intValue(j['mc']),
+  );
 }
 
 /// 그룹 멤버 (/logs/group/members/v2 의 ms 항목)
@@ -367,7 +389,7 @@ class GroupMember {
       nickname: stringValue(j['n']),
       category: stringValue(j['ct']),
       studyMs: sm,
-      studying: boolValue(j['im']),
+      studying: j['dl'] is Map ? boolValue(j['dl']['is']) : false,
     );
   }
 }

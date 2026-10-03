@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/services.dart' show rootBundle;
 
 /// 번들된 Mozilla CA 루트를 기본 SecurityContext에 추가.
@@ -9,8 +10,9 @@ Future<void> setupCaCerts() async {
   if (!Platform.isWindows) return;
   try {
     final data = await rootBundle.load('assets/ca/cacert.pem');
-    SecurityContext.defaultContext
-        .setTrustedCertificatesBytes(data.buffer.asUint8List());
+    SecurityContext.defaultContext.setTrustedCertificatesBytes(
+      data.buffer.asUint8List(),
+    );
   } catch (_) {
     // 중복/파싱 오류 등은 무시 (있는 루트는 그대로 유지)
   }

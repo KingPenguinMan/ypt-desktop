@@ -1,6 +1,9 @@
 import 'dart:convert';
+
 import 'social_credentials.dart';
+
 import 'dart:math';
+
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
@@ -119,7 +122,7 @@ class SocialAuth {
   final http.Client _client;
 
   SocialAuth(this.provider, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   // 네이티브 WebKit 인터셉터(linux/runner/social_webview.cc)와 통신.
   static const MethodChannel _channel = MethodChannel('ypt/social_webview');
@@ -160,19 +163,30 @@ class SocialAuth {
     if (redirect == null) throw const SocialAuthCancelled();
     String? code;
     String? err;
+    String? returnedState;
     if (redirect.startsWith('intent:')) {
       // 안드로이드 intent URL: ...;S.code=CODE;S.state=...;end (예: 네이버)
       code = RegExp(r'S\.code=([^;]+)').firstMatch(redirect)?.group(1);
+      final rawState = RegExp(r'S\.state=([^;]+)')
+          .firstMatch(redirect)
+          ?.group(1);
+      returnedState = rawState == null ? null : Uri.decodeComponent(rawState);
       err = RegExp(r'S\.error\w*=([^;]+)').firstMatch(redirect)?.group(1);
     } else {
       final uri = Uri.parse(redirect);
       code = uri.queryParameters['code'];
-      err = uri.queryParameters['error_description'] ??
+      returnedState = uri.queryParameters['state'];
+      err =
+          uri.queryParameters['error_description'] ??
           uri.queryParameters['error'];
     }
     if (code == null || code.isEmpty) {
       throw SocialAuthException(
-          '${provider.name} authorization failed${err != null ? ': $err' : ''}');
+        '${provider.name} authorization failed${err != null ? ': $err' : ''}',
+      );
+    }
+    if (returnedState != state) {
+      throw SocialAuthException('OAuth state mismatch');
     }
     return code;
   }
@@ -184,13 +198,15 @@ class SocialAuth {
       if (provider.tokenSendsRedirectUri) 'redirect_uri': provider.redirectUri,
       'code': code,
       'state': state,
-      if (provider.clientSecret != null) 'client_secret': provider.clientSecret!,
+      if (provider.clientSecret != null)
+        'client_secret': provider.clientSecret!,
       ...provider.tokenExtraParams,
     };
     final http.Response r;
     if (provider.tokenUsesGet) {
       r = await _client.get(
-          Uri.parse(provider.tokenBase).replace(queryParameters: params));
+        Uri.parse(provider.tokenBase).replace(queryParameters: params),
+      );
     } else {
       r = await _client.post(
         Uri.parse(provider.tokenBase),
@@ -200,12 +216,15 @@ class SocialAuth {
     }
     if (r.statusCode != 200) {
       throw SocialAuthException(
-          '${provider.name} token exchange failed (HTTP ${r.statusCode})');
+        '${provider.name} token exchange failed (HTTP ${r.statusCode})',
+      );
     }
     final j = jsonDecode(utf8.decode(r.bodyBytes));
     final token = (j is Map) ? j['access_token']?.toString() : null;
     if (token == null || token.isEmpty) {
-      throw SocialAuthException('${provider.name} did not return an access token');
+      throw SocialAuthException(
+        '${provider.name} did not return an access token',
+      );
     }
     return token;
   }
@@ -217,21 +236,25 @@ class SocialAuth {
     );
     if (r.statusCode != 200) {
       throw SocialAuthException(
-          '${provider.name} profile fetch failed (HTTP ${r.statusCode})');
+        '${provider.name} profile fetch failed (HTTP ${r.statusCode})',
+      );
     }
     final j = jsonDecode(utf8.decode(r.bodyBytes));
     return _parseMe(j);
   }
 
   _ProviderUser _parseMe(dynamic j) {
-    if (j is! Map) throw SocialAuthException('${provider.name} profile malformed');
+    if (j is! Map) {
+      throw SocialAuthException('${provider.name} profile malformed');
+    }
     switch (provider.name) {
       case 'Naver':
         final res = j['response']; // {response:{id,email,...}}
         if (res is Map) {
           return _ProviderUser(
-              id: res['id']?.toString() ?? '',
-              email: res['email']?.toString() ?? '');
+            id: res['id']?.toString() ?? '',
+            email: res['email']?.toString() ?? '',
+          );
         }
         break;
       case 'Kakao':

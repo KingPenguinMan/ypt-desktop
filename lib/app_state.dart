@@ -1,16 +1,21 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+import 'server_session.dart';
+
 import 'dart:async';
 import 'dart:math' show min;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'ypt_api.dart';
 import 'models.dart';
 import 'social_auth.dart';
 import 'social_credentials.dart';
 import 'timer_persistence.dart';
-import 'app_log.dart';
 import 'gap_log.dart';
-import 'history_models.dart';
 
 /// 랭킹 조회 주기. wire 값은 API 의 `type` 파라미터에 그대로 실리는 문자열.
 enum RankPeriod {
@@ -27,9 +32,138 @@ enum RankPeriod {
   final String label;
 }
 
-
 class AppState extends ChangeNotifier {
-  final YptApi api = YptApi();
+  final YptApi api;
+  AppState({YptApi? api}) : api = api ?? YptApi();
+  String? _accountKey;
+  int _accountGeneration = 0;
+  int _historyGeneration = 0;
+  bool timerUncertain = false;
+  bool _sessionReady = false;
+  int gapRevision = 0;
+  String? selectedDateError;
+  bool selectedDateLoading = false;
+  Timer? _reconcileTimer;
+  String _day = todayStr();
+
+  Future<void> _bindAccount(
+    UserData data, {
+    String? email,
+    bool restoring = false,
+  }) async {
+    final sp = await SharedPreferences.getInstance();
+    String? identity = data.accountId;
+    final address = (data.email ?? email)?.trim().toLowerCase();
+    if (identity == null && address != null && address.isNotEmpty) {
+      identity = 'email:$address';
+    }
+    String? key = identity == null
+        ? null
+        : sha256.convert(utf8.encode(identity)).toString();
+    // Existing installations may have a valid JWT but no account id/email
+    // and no v2 local key yet. Use a stable token hash for migration instead
+    // of blocking startup and hiding the account.
+    key ??= api.jwt == null
+        ? null
+        : 'jwt:${sha256.convert(utf8.encode(api.jwt!)).toString()}';
+    if (key == null && restoring) key = sp.getString('last_account_key_v2');
+    if (key == null) throw const YptApiException('无法确认账号身份，未加载本地记录');
+    if (key != _accountKey) {
+      _accountGeneration++;
+      _historyGeneration++;
+      _clearTimer();
+      history.clear();
+      historySubjects.clear();
+      selectedDate = null;
+      selectedDateError = null;
+      selectedDateLoading = false;
+      historyLoading = false;
+      historyErrorText = null;
+      subjectTimes.clear();
+      subjectTimesById.clear();
+      pendingGap = null;
+      gapSyncErrorText = null;
+      _accountKey = key;
+      _timerStore = TimerPersistence(key);
+      _gapLog = GapLog(key);
+      gapRevision++;
+    }
+    await sp.setString('last_account_key_v2', key);
+    user = data;
+    pendingGap = await _gapLog.openGap();
+    await _applySession(data.session);
+    _reconcileTimer?.cancel();
+    _reconcileTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!timerLoading && loggedIn) unawaited(reconcileTimer());
+    });
+  }
+
+  Future<void> reconcileTimer() => _serialize<void>(() async {
+    if (!loggedIn) return;
+    try {
+      final data = await api.reloadInfo();
+      user = data;
+      await _applySession(data.session);
+      await _refreshSubjectTimesQuietly();
+    } catch (e) {
+      timerUncertain = true;
+      timerErrorText = '等待服务端确认计时状态：${_readableError(e)}';
+    }
+    notifyListeners();
+  });
+
+  Future<void> _applySession(ServerSession? session) async {
+    _sessionReady = session != null;
+    if (session == null || (session.running && session.startedAtMs == null)) {
+      timerUncertain = true;
+      timerErrorText = '服务端未返回完整计时状态，请刷新后再操作';
+      return;
+    }
+    timerUncertain = false;
+    timerErrorText = null;
+    if (!session.running) {
+      _clearTimer();
+      await _timerStore.clear();
+      return;
+    }
+    final name = session.subject;
+    final snap = await _timerStore.load();
+    final sameSession = snap?.startedAtMs == session.startedAtMs;
+    final title = name ?? (sameSession ? snap?.subjectTitle : null) ?? '正在学习';
+    activeSubject =
+        user?.subjects.where((s) => s.title == title).firstOrNull ??
+        Subject(
+          id: sameSession ? snap!.subjectId : 0,
+          title: title,
+          studyMs: 0,
+          order: 0,
+          colorValue: sameSession ? snap!.subjectColor : 0xFFE8552D,
+          archived: false,
+        );
+    _startedAtMs = session.startedAtMs;
+    _startTicker();
+    await _timerStore.save(
+      TimerSnapshot(
+        startedAtMs: _startedAtMs!,
+        subjectId: activeSubject!.id,
+        subjectTitle: title,
+        subjectColor: activeSubject!.colorValue,
+      ),
+    );
+    if (pendingGap != null) {
+      final end = DateTime.fromMillisecondsSinceEpoch(_startedAtMs!);
+      final gap = pendingGap!;
+      if (end.isAfter(gap.start) &&
+          isGapLongEnough(end.difference(gap.start))) {
+        await _gapLog.commit(gap.copyWith(end: end));
+      } else {
+        await _gapLog.clearOpen();
+      }
+      pendingGap = null;
+      gapRevision++;
+    }
+  }
+
   UserData? user;
   bool loading = false;
   String? errorText;
@@ -43,7 +177,7 @@ class AppState extends ChangeNotifier {
   String? timerErrorText;
 
   /// 计时会话本地持久化。startedAt 必须落盘，否则进程被杀后无法 stop。
-  final TimerPersistence _timerStore = TimerPersistence();
+  late TimerPersistence _timerStore;
 
   /// 秒级 UI 刷新订阅者。
   ///
@@ -58,7 +192,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// 空档自述记录（停止计时 → 下次开始之间这段时间用户在做什么）。
-  final GapLog _gapLog = GapLog();
+  late GapLog _gapLog;
 
   /// 当前空档的起始时间。有值且正在计时=false 时，表示"处于空档中"。
   ///
@@ -68,14 +202,18 @@ class AppState extends ChangeNotifier {
 
   bool get hasPendingGap => pendingGap != null;
 
-  /// 空档记录同步到服务端失败的提示。本地已保存,只是云端没成功。
+  /// Local-only gap note. The unofficial client does not upload this data.
   String? gapSyncErrorText;
 
   /// 当天已闭合的空档记录（供统计页与复盘页使用）。
-  Future<List<GapInterval>> gapEntries() => _gapLog.todayEntries();
+  Future<List<GapInterval>> gapEntries() => _accountKey == null
+      ? Future.value([])
+      : _gapLog.entriesFor(DateTime.now());
 
   /// 当天未计入学习时间的空档总时长。
-  Future<Duration> gapDuration() => _gapLog.todayGapDuration();
+  Future<Duration> gapDuration() => _accountKey == null
+      ? Future.value(Duration.zero)
+      : _gapLog.todayGapDuration();
 
   /// 导出今日空档记录为 CSV。
   Future<String> gapCsv() => _gapLog.toCsv();
@@ -106,8 +244,7 @@ class AppState extends ChangeNotifier {
     errorText = null;
     notifyListeners();
     try {
-      user = await api.reloadInfo();
-      await _refreshSubjectTimesQuietly();
+      await reconcileTimer();
     } catch (e) {
       errorText = 'Could not load subjects: ${_readableError(e)}';
     }
@@ -215,119 +352,84 @@ class AppState extends ChangeNotifier {
   ///
   /// [days] 는 2번 경로에서만 의미가 있다.
   Future<void> loadHistory({int days = 90}) async {
-    if (api.jwt == null) return;
+    if (!loggedIn) return;
+    final generation = ++_historyGeneration;
+    final account = _accountGeneration;
     historyLoading = true;
     historyErrorText = null;
+    history.clear();
+    historySubjects.clear();
     notifyListeners();
-
-    // ── 1순위:批量 엔드포인트 ──
-    final bulkOk = await _tryLoadHistoryBulk(days: days);
-    if (bulkOk) {
-      // 오늘은 앱 안에서 계산한 값이 정확하므로 덮어쓴다.
-      history[todayStr()] = Duration(milliseconds: todayStudyMs);
-      historyLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    // ── 2순위: 날짜별 조회 ──
-    final now = DateTime.now();
-    final dates = <String>[];
-    for (var i = 0; i < days; i++) {
-      final d = now.subtract(Duration(days: i));
-      dates.add(
-          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}');
-    }
-
-    int ok = 0;
     int failed = 0;
-    // 한 번에 전부 쏘면 서버가 막을 수 있으므로 적당히 나눠서 보낸다.
-    const chunk = 6;
-    for (var i = 0; i < dates.length; i += chunk) {
-      final batch = dates.sublist(i, min(i + chunk, dates.length));
-      final results = await Future.wait(
-        batch.map((d) => _fetchDayQuietly(d)),
-      );
-      for (final r in results) {
-        if (r == null) {
-          failed++;
-        } else {
-          history[r.key] = r.value;
-          ok++;
-        }
-      }
-      // 让出一点时间，避免连续打满。
-      if (i + chunk < dates.length) {
-        await Future.delayed(const Duration(milliseconds: 120));
-      }
-    }
-
-    // 오늘은 이미 앱 안에서 계산한 값이 있으므로 덮어쓴다.
-    history[todayStr()] = Duration(milliseconds: todayStudyMs);
-
-    if (ok == 0 && failed > 0) {
-      historyErrorText = 'Could not load history';
-    }
-    historyLoading = false;
-    notifyListeners();
-  }
-
-  /// 批量 엔드포인트로 히트맵을 채운다. 성공 여부만 반환.
-  ///
-  /// 응답 구조가 미확인이라 파서가 못 읽을 수 있다. 그럴 때 false 를 돌려
-  /// 호출부가 날짜별 조회로 폴백하게 한다. 파싱은 [YptApi.parseCalendarPoints]
-  /// 가 담당하며, "아무 날짜도 못 뽑았다"면 실패로 간주한다.
-  Future<bool> _tryLoadHistoryBulk({required int days}) async {
     final now = DateTime.now();
-    final start = now.subtract(Duration(days: days - 1));
-    String fmt(DateTime d) =>
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-    // range/days 를 먼저 시도(범위가 명시적이므로 응답 형태가 더 단순할 확률이 높다).
-    for (final attempt in <Future<List<CalendarPoint>> Function()>[
-      () => api.rangeDays(fmt(start), fmt(now)),
-      () => api.calendarHome(),
-    ]) {
-      try {
-        final points = await attempt();
-        if (points.isEmpty) continue;
-        history.clear();
-        for (final p in points) {
-          history[p.date] = p.duration;
+    try {
+      // Use the confirmed daily endpoint until bulk response fixtures are available.
+      for (var i = 0; i < days; i += 3) {
+        if (account != _accountGeneration || generation != _historyGeneration) {
+          return;
         }
-        // 범위 밖 데이터가 섞여도 무해하므로 걸러내지 않는다.
-        return true;
-      } catch (e) {
-        // 다음 시도로 넘어간다. 인증 실패면 그대로 내려가는 게 맞다.
-        if (e is YptAuthException) rethrow;
-        continue;
+        final dates = [
+          for (var n = i; n < min(i + 3, days); n++)
+            _dateKey(DateTime(now.year, now.month, now.day - n)),
+        ];
+        final results = await Future.wait(
+          dates.map((d) async {
+            try {
+              return MapEntry(d, await api.dayLogSubjects(d));
+            } on YptAuthException {
+              rethrow;
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        if (account != _accountGeneration || generation != _historyGeneration) {
+          return;
+        }
+        for (final r in results) {
+          if (r == null) {
+            failed++;
+            continue;
+          }
+          history[r.key] = Duration(milliseconds: r.value.totalMs);
+          historySubjects[r.key] = r.value.byTitle;
+        }
+        notifyListeners();
+      }
+      if (failed > 0) historyErrorText = '$failed 天加载失败，灰色未知日期不代表零学习';
+    } catch (e) {
+      if (account == _accountGeneration) historyErrorText = _readableError(e);
+    } finally {
+      if (account == _accountGeneration && generation == _historyGeneration) {
+        historyLoading = false;
+        notifyListeners();
       }
     }
-    return false;
   }
 
-  Future<MapEntry<String, Duration>?> _fetchDayQuietly(String date) async {
-    try {
-      final snap = await api.dayLogSubjectsAuto(date);
-      final total = snap.byId.values.fold<int>(0, (a, b) => a + b);
-      return MapEntry(date, Duration(milliseconds: total));
-    } catch (_) {
-      return null;
-    }
-  }
+  static String _dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// 선택된 날짜의 과목별 상세. 필요할 때만 요청한다.
   Future<void> selectDate(String date) async {
     selectedDate = date;
+    selectedDateError = null;
+    selectedDateLoading = true;
     notifyListeners();
-    if (historySubjects.containsKey(date)) return;
+    final account = _accountGeneration;
     try {
-      final snap = await api.dayLogSubjectsAuto(date);
+      final snap = await api.dayLogSubjects(date);
+      if (account != _accountGeneration) return;
       historySubjects[date] = snap.byTitle;
-      notifyListeners();
-    } catch (_) {
-      historySubjects[date] = const {};
-      notifyListeners();
+      history[date] = Duration(milliseconds: snap.totalMs);
+    } catch (e) {
+      if (account == _accountGeneration && selectedDate == date) {
+        selectedDateError = _readableError(e);
+      }
+    } finally {
+      if (account == _accountGeneration && selectedDate == date) {
+        selectedDateLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -385,25 +487,23 @@ class AppState extends ChangeNotifier {
     if (t == null || t.isEmpty) return;
     api.jwt = t;
     loading = true;
+    errorText = null;
     notifyListeners();
     try {
-      user = await api.reloadInfo();
-      await _refreshSubjectTimesQuietly(); // 과목별 오늘 시간
-      // 登录成功后立刻恢复上次未结束的计时会话。必须在 user 拿到之后调用——
-      // restoreTimer 要用 user.subjects 对齐科目名和颜色。
-      await restoreTimer();
-      // 同样恢复上次未闭合的空档，让"记录在做什么"的提示跨重启存活。
-      pendingGap = await _gapLog.openGap();
-    } catch (_) {
-      api.jwt = null; // 만료/오류
+      final data = await api.reloadInfo();
+      await _bindAccount(data, restoring: true);
+      await _refreshSubjectTimesQuietly();
+    } on YptAuthException {
+      api.jwt = null;
       user = null;
       await sp.remove('jwt');
-      // token 失效时不要留着会话快照——服务端已不认识这个用户了。
-      await _timerStore.clear();
-      await _gapLog.clearOpen();
+      errorText = '登录已过期，请重新登录；本地记录已保留';
+    } catch (e) {
+      errorText = '暂时无法连接，登录凭证和本地记录已保留：${_readableError(e)}';
+    } finally {
+      loading = false;
+      notifyListeners();
     }
-    loading = false;
-    notifyListeners();
   }
 
   Future<bool> login(String email, String password) async {
@@ -414,7 +514,7 @@ class AppState extends ChangeNotifier {
       final res = await api.signIn(email, password);
       switch (res) {
         case SignInOk(:final data):
-          user = data;
+          await _bindAccount(data, email: email);
           final sp = await SharedPreferences.getInstance();
           await sp.setString('jwt', data.jwt!);
           await _refreshSubjectTimesQuietly(); // 과목별 오늘 시간
@@ -438,7 +538,8 @@ class AppState extends ChangeNotifier {
     // 凭证通过构建参数注入，仓库里不含任何值（见 lib/social_credentials.dart）。
     // 未注入时直接给出可操作的错误，而不是发一个注定 401 的请求让用户猜。
     if (!SocialCredentials.isConfigured) {
-      errorText = '社交登录未配置。请在构建时注入 ${provider.name} 的凭证：'
+      errorText =
+          '社交登录未配置。请在构建时注入 ${provider.name} 的凭证：'
           'flutter build ... --dart-define=KAKAO_CLIENT_ID=... '
           '--dart-define=NAVER_CLIENT_ID=... --dart-define=NAVER_CLIENT_SECRET=...'
           '（Windows 用户可运行 build_and_test.bat，'
@@ -462,6 +563,7 @@ class AppState extends ChangeNotifier {
           try {
             user = await api.reloadInfo();
           } catch (_) {}
+          await _bindAccount(user!);
           await _refreshSubjectTimesQuietly();
           loading = false;
           notifyListeners();
@@ -481,30 +583,51 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
-  Future<void> logout() async {
-    // 必须先真正停掉服务端的会话再登出。silent 模式现在会发 /study/stop
-    // （修复前它只是本地清空就返回，导致登出后服务端仍在累计时长）。
-    await stopTimer(silent: true);
+  Future<void> logout() => _serialize<void>(() async {
+    if (timerUncertain || !_sessionReady) {
+      try {
+        user = await api.reloadInfo();
+        await _applySession(user!.session);
+      } catch (e) {
+        timerErrorText = '无法确认停止状态，尚未退出：${_readableError(e)}';
+        notifyListeners();
+        return;
+      }
+    }
+    if (timerUncertain || !await _stopTimerInternal(silent: true)) return;
     final sp = await SharedPreferences.getInstance();
     await sp.remove('jwt');
+    await sp.remove('last_account_key_v2');
+    _reconcileTimer?.cancel();
+    _accountGeneration++;
+    _historyGeneration++;
     api.jwt = null;
     user = null;
+    _accountKey = null;
+    _sessionReady = false;
+    timerUncertain = false;
     subjectTimesById = {};
     subjectTimes = {};
+    history.clear();
+    historySubjects.clear();
+    selectedDate = null;
+    selectedDateError = null;
+    selectedDateLoading = false;
+    historyLoading = false;
+    historyErrorText = null;
     myRank = null;
     ranks = [];
     groups = [];
     joinedGroups = [];
+    pendingGap = null;
+    gapSyncErrorText = null;
+    gapRevision++;
     errorText = null;
     timerErrorText = null;
     statsErrorText = null;
     groupsErrorText = null;
-    // 登出后不应再挂着"待补录空档"，否则下一个登录的用户会看到上一位的记录。
-    pendingGap = null;
-    await _gapLog.clearOpen();
-    await _timerStore.clear();
     notifyListeners();
-  }
+  });
 
   /// 计时请求串行化。
   ///
@@ -522,76 +645,50 @@ class AppState extends ChangeNotifier {
   /// `completer.future` 冲突，编译器会报 return_of_invalid_type。
   Future<T> _serialize<T>(Future<T> Function() op) {
     final completer = Completer<T>();
-    _timerLock = _timerLock.then((_) async {
-      try {
-        completer.complete(await op());
-      } catch (e, st) {
-        completer.completeError(e, st);
-      }
-      // 链本身必须吞掉异常，否则一次失败会让后续所有操作都跳过。
-    }).catchError((Object _) {
-      // no-op：调用方的错误已通过 completer 传出。
-    });
+    _timerLock = _timerLock
+        .then((_) async {
+          try {
+            completer.complete(await op());
+          } catch (e, st) {
+            completer.completeError(e, st);
+          }
+          // 链本身必须吞掉异常，否则一次失败会让后续所有操作都跳过。
+        })
+        .catchError((Object _) {
+          // no-op：调用方的错误已通过 completer 传出。
+        });
     return completer.future;
   }
 
   Future<void> startTimer(Subject s) => _serialize<void>(() => _startTimer(s));
 
   Future<void> _startTimer(Subject s) async {
-    if (timerLoading) return;
-    // 已���在计时则先停掉。stop 失败会抛异常，这里直接中断——不能让两个会话
-    // 同时在服务端跑。
-    if (studying) {
-      final ok = await _stopTimerInternal();
-      if (!ok) return;
-    }
-
-    // 收尾上一次停止后留下的空档。
-    //
-    // 这里**不能无条件 commit**：空档从"停止那一刻"开始累积，用户可能几秒
-    // 后就重新开始，甚至只是点错了。把这种空档也写成记录，History 里就会
-    // 堆出一串 "0m · 未填写" 的垃圾条目（用户实际遇到过，见问题反馈）。
-    //
-    // 判定规则：
-    //   · 时长 >= 阈值 —— 保留。走到这里说明调用方没有询问过（例如从托盘
-    //     菜单直接开始，那里弹窗不合适），先落成一条未回答的记录，
-    //     用户可以在 History 里补填。
-    //   · 时长 < 阈值 —— 丢弃。太短，没有任何记录价值。
-    if (pendingGap != null && pendingGap!.isOpen) {
-      final gap = pendingGap!;
-      final meaningful = isGapLongEnough(gap.duration);
-      AppLog.log('start: 收尾空档 ${gap.duration.inSeconds}s '
-          '${meaningful ? "(保留，可在 History 补填)" : "(过短，丢弃)"}');
-      if (meaningful) {
-        await _gapLog.commit(gap.copyWith(end: DateTime.now()));
-      } else {
-        await _gapLog.clearOpen();
-      }
-      pendingGap = null;
-    }
-
-    final startedAtMs = DateTime.now().millisecondsSinceEpoch;
+    if (!loggedIn) return;
     timerLoading = true;
     timerErrorText = null;
     notifyListeners();
     try {
-      await api.studyStart(s.title, taskId: null);
-      activeSubject = s;
-      _startedAtMs = startedAtMs;
-      _startTicker();
-      // 立刻落盘。必须在请求成功之后写——写早了会留下一个根本没发出去的
-      // 会话快照，重启后去 stop 一个服务端不存在的会话。
-      await _timerStore.save(TimerSnapshot(
-        startedAtMs: startedAtMs,
-        subjectId: s.id,
-        subjectTitle: s.title,
-        subjectColor: s.colorValue,
-      ));
+      // Reconcile before every mutation: another device may have stopped/switched.
+      user = await api.reloadInfo();
+      await _applySession(user!.session);
+      if (timerUncertain) return;
+      if (studying && !await _stopTimerInternal(silent: true)) return;
+      timerLoading = true;
+      final session = await api.studyStart(s.title);
+      if (session != null) {
+        await _applySession(session);
+      } else {
+        user = await api.reloadInfo();
+        await _applySession(user!.session);
+      }
     } catch (e) {
-      timerErrorText = 'Could not start timer: ${_readableError(e)}';
+      // A timeout may have happened AFTER the server accepted the request.
+      timerUncertain = true;
+      timerErrorText = '开始结果待确认，请刷新：${_readableError(e)}';
+    } finally {
+      timerLoading = false;
+      notifyListeners();
     }
-    timerLoading = false;
-    notifyListeners();
   }
 
   /// 用户点了停止。正常路径，会把空档记录挂起等下次开始时补录。
@@ -607,79 +704,64 @@ class AppState extends ChangeNotifier {
 
   /// 返回 true 表示确实停掉了（或本来就没在计时），false 表示失败。
   Future<bool> _stopTimerInternal({bool silent = false}) async {
-    if (timerLoading && !silent) return false;
-    final previousSubject = activeSubject;
-    final started = _startedAtMs;
-    if (previousSubject == null || started == null) {
-      // 理论上不会发生：只要开始过就一定落过盘。发生说明存储被清了。
-      // 此时仍要把 UI 和磁盘对齐，否则下次启动会拿不到会话。
-      _clearTimer();
-      await _timerStore.clear();
-      notifyListeners();
-      return true;
-    }
-
-    _clearTimer();
-    // 本地状态先清（UI 立即响应），但**不能**提前清持久化——请求失败还要
-    // 能回滚。等服务端确认后再清。
-    if (silent) {
-      // 静默模式用于退出登录。此时依然要把服务端的会话停掉，否则用户登出后
-      // 服务端还在替他累计时长。修复前的实现在这里直接 return，是明确的 bug。
-      try {
-        await api.studyStop(started);
-        await _timerStore.clear();
-        user = await api.reloadInfo();
-        await _refreshSubjectTimesQuietly();
-      } catch (e) {
-        // 登出场景下即使 stop 失败也不能拦住登出，但要把本地对齐到"未知
-        // 状态"而不是谎称已停止——保留快照，下次启动会提示用户处理。
-        timerErrorText = 'Could not stop timer on sign out: ${_readableError(e)}';
-      }
-      notifyListeners();
-      return true;
-    }
-
-    // 停止后开启一个待补录的空档。用户在下次开始前会看到"这段时间在做什么"。
-    final stoppedAt = DateTime.now();
-    pendingGap = GapInterval(start: stoppedAt);
-    await _gapLog.setOpen(pendingGap!);
-
+    if (!loggedIn) return true;
     timerLoading = true;
     timerErrorText = null;
     notifyListeners();
     try {
-      await api.studyStop(started);
-      await _timerStore.clear();
-      user = await api.reloadInfo(); // 오늘 총시간 갱신
-      await _refreshSubjectTimesQuietly(); // 과목별 시간 갱신
-      timerLoading = false;
-      notifyListeners();
-      return true;
+      user = await api.reloadInfo();
+      await _applySession(user!.session);
+      if (timerUncertain) return false;
+      final started = _startedAtMs;
+      if (!studying || started == null) return true;
+      final result = await api.studyStop(started);
+      // From this point onwards the stop is committed. Never resurrect it if
+      // a disk write or profile refresh fails.
+      _clearTimer();
+      timerUncertain = false;
+      if (result != null) {
+        history[result.date] = Duration(
+          milliseconds: result.studyMs + result.addedMs,
+        );
+      }
     } catch (e) {
-      // 回滚：把会话恢复成"正在计时"，并把快照写回磁盘。
-      activeSubject = previousSubject;
-      _startedAtMs = started;
-      _startTicker();
-      pendingGap = null;
-      await _gapLog.clearOpen();
-      await _timerStore.save(TimerSnapshot(
-        startedAtMs: started,
-        subjectId: previousSubject.id,
-        subjectTitle: previousSubject.title,
-        subjectColor: previousSubject.colorValue,
-      ));
-      timerErrorText = 'Could not stop timer: ${_readableError(e)}';
+      timerUncertain = true;
+      timerErrorText = '停止结果待确认，已保留恢复数据：${_readableError(e)}';
+      return false;
+    } finally {
       timerLoading = false;
       notifyListeners();
-      return false;
     }
+    try {
+      await _timerStore.clear();
+      if (!silent) {
+        pendingGap = GapInterval(start: DateTime.now());
+        await _gapLog.setOpen(pendingGap!);
+        gapRevision++;
+      }
+    } catch (e) {
+      timerErrorText = '已停止，但本地保存失败：${_readableError(e)}';
+    }
+    try {
+      user = await api.reloadInfo();
+      await _refreshSubjectTimesQuietly();
+    } catch (e) {
+      timerErrorText = '已停止，统计稍后刷新：${_readableError(e)}';
+    }
+    notifyListeners();
+    return true;
   }
 
   /// 用户补录当前空档时选择/填写的内容。
   Future<void> describePendingGap({String? tag, String? activity}) async {
     final gap = pendingGap;
     if (gap == null) return;
-    pendingGap = gap.copyWith(activity: activity, tag: tag);
+    pendingGap = GapInterval(
+      start: gap.start,
+      end: gap.end,
+      activity: activity,
+      tag: tag,
+    );
     await _gapLog.setOpen(pendingGap!);
     notifyListeners();
   }
@@ -691,140 +773,57 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 确认当前空档，闭合本地记录并同步到服务端 /rest/record。
-  ///
-  /// 官方客户端在停止计时后立即询问(`alert_stop_study_just_now_record`),
-  /// 所以调用时机是"对话框点确定"那一刻，此时 startedAt/endedAt 都已确定。
-  ///
-  /// 云端失败**不阻塞**本地记录：这只是一个复盘辅助功能，失败了就退化为
-  /// 本地记录，不该因此丢失数据或中断学习。
+  /// Close and save the gap locally. The official rest endpoint has not been
+  /// verified, so this client deliberately does not send a guessed request.
   Future<void> commitPendingGap() async {
     final gap = pendingGap;
     if (gap == null) return;
-    // 用户点确定的那一刻作为空档结束时刻。
-    final endedAt = DateTime.now();
-    final closed = gap.copyWith(end: endedAt);
+    final closed = gap.copyWith(end: DateTime.now());
     await _gapLog.commit(closed);
     pendingGap = null;
+    gapRevision++;
     gapSyncErrorText = null;
     notifyListeners();
-
-    // 已回答过的才上报：只是记录时长而无归类时，价值不大且会污染统计。
-    if (!closed.isAnswered) return;
-    try {
-      await api.recordRest(
-        startedAtMs: closed.start.millisecondsSinceEpoch,
-        endedAtMs: endedAt.millisecondsSinceEpoch,
-        tag: closed.tag,
-      );
-    } catch (e) {
-      // 本地已保存,这里只提示云端没成功能。
-      gapSyncErrorText =
-          'Saved locally, but YPT server rejected it: ${_readableError(e)}';
-      notifyListeners();
-    }
   }
 
-  /// 补填或修改一条已闭合空档的自述内容。
-  ///
-  /// 存在的原因：从托盘菜单直接开始计时时弹窗并不合适，那种情况下空档会被
-  /// 落成一条"未填写"的记录。若这些记录无法再编辑，就变成了死数据 ——
-  /// 用户只能删掉，等于白白丢了一段可复盘的信息。
-  ///
-  /// 这里**不用 copyWith**：它的实现是 `activity ?? this.activity`，
-  /// 传 null 会保留旧值，导致"清空已填内容"做不到。直接构造更明确。
   Future<void> updateGapLabel(
     GapInterval gap, {
     String? tag,
     String? activity,
   }) async {
     final trimmed = activity?.trim();
-    final updated = GapInterval(
-      start: gap.start,
-      end: gap.end,
-      activity: (trimmed == null || trimmed.isEmpty) ? null : trimmed,
-      tag: tag,
+    await _gapLog.update(
+      GapInterval(
+        start: gap.start,
+        end: gap.end,
+        tag: tag,
+        activity: trimmed == null || trimmed.isEmpty ? null : trimmed,
+      ),
     );
-    await _gapLog.update(updated);
+    gapRevision++;
     notifyListeners();
-
-    // 与 commitPendingGap 保持一致：只有回答过的才上报，避免污染统计。
-    if (!updated.isAnswered || updated.end == null) return;
-    try {
-      await api.recordRest(
-        startedAtMs: updated.start.millisecondsSinceEpoch,
-        endedAtMs: updated.end!.millisecondsSinceEpoch,
-        tag: updated.tag,
-      );
-    } catch (e) {
-      gapSyncErrorText =
-          'Saved locally, but YPT server rejected it: ${_readableError(e)}';
-      notifyListeners();
-    }
   }
 
-  /// 删除一条已闭合的空档（同时尝试删服务端记录）。
   Future<void> deleteGap(GapInterval gap) async {
     await _gapLog.remove(gap);
-    notifyListeners();
-    try {
-      await api.deleteRest(startedAtMs: gap.start.millisecondsSinceEpoch);
-    } catch (e) {
-      // 服务端删不掉不影响本地,用户已经看到列表更新了。
-      debugPrint('deleteRest failed: $e');
-    }
-  }
-
-  /// 编辑已闭合空档的标签。
-  Future<void> retagGap(GapInterval gap, String? tag) async {
-    final updated = gap.copyWith(tag: tag);
-    await _gapLog.update(updated);
-    pendingGap = null;
-    notifyListeners();
-    try {
-      await api.editRest(
-        startedAtMs: updated.start.millisecondsSinceEpoch,
-        tag: tag,
-      );
-    } catch (e) {
-      gapSyncErrorText = 'Tag change not synced: ${_readableError(e)}';
-      notifyListeners();
-    }
-  }
-
-  /// 恢复上次会话（应用启动时调用）。
-  ///
-  /// 若磁盘上有快照，说明上次退出时服务端的 `/study/start` 已经发出去了。
-  /// 这里重建 UI 上的计时显示，让用户看到"你之前在计时，点了停止"。
-  Future<void> restoreTimer() async {
-    final snap = await _timerStore.load();
-    if (snap == null) return;
-
-    // 尝试用服务端返回的 subjects 对齐科目信息，拿到正确的名字和颜色。
-    var subject = user?.subjects.where((s) => s.id == snap.subjectId).firstOrNull;
-    subject ??= user?.subjects
-        .where((s) => s.title == snap.subjectTitle)
-        .firstOrNull;
-    subject ??= Subject(
-      id: snap.subjectId,
-      title: snap.subjectTitle,
-      studyMs: 0,
-      order: 0,
-      colorValue: snap.subjectColor,
-      archived: false,
-    );
-
-    activeSubject = subject;
-    _startedAtMs = snap.startedAtMs;
-    _startTicker();
+    gapRevision++;
     notifyListeners();
   }
+
+  Future<void> restoreTimer() => reconcileTimer();
 
   void _startTicker() {
     _ticker?.cancel();
     _syncElapsed();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       _syncElapsed();
+      if (_day != todayStr()) {
+        _day = todayStr();
+        subjectTimes.clear();
+        subjectTimesById.clear();
+        historySubjects.remove(_day);
+        unawaited(reconcileTimer());
+      }
       // 关键性能点：只通知"秒级监听者"，不广播全局。
       //
       // 原来的实现每秒 notifyListeners()，导致所有 context.watch<AppState>()
@@ -911,6 +910,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _reconcileTimer?.cancel();
     _tickListeners.clear();
     api.close();
     super.dispose();

@@ -104,9 +104,7 @@ class CalendarHeatmap extends StatelessWidget {
                         child: Column(
                           children: [
                             for (var d = 0; d < 7; d++)
-                              _buildCell(
-                                start.add(Duration(days: 7 * w + d)),
-                              ),
+                              _buildCell(start.add(Duration(days: 7 * w + d))),
                           ],
                         ),
                       ),
@@ -124,6 +122,7 @@ class CalendarHeatmap extends StatelessWidget {
 
   Widget _buildCell(DateTime date) {
     final key = formatDate(date);
+    final known = data.containsKey(key);
     final dur = data[key] ?? Duration.zero;
     final isToday = _sameDay(date, today);
     final isSelected = selectedDate == key;
@@ -133,7 +132,9 @@ class CalendarHeatmap extends StatelessWidget {
     return Tooltip(
       // 不用 '$key' / '${HeatLevel.label(dur)}'——$ 后面跟标识符时
       // 直接写变量名即可，$key 就是 key 而不是字面量 "$key"。
-      message: isFuture ? key : '$key\n${HeatLevel.label(dur)}',
+      message: isFuture
+          ? key
+          : '$key\n${known ? HeatLevel.label(dur) : '尚未加载 / 加载失败'}',
       child: GestureDetector(
         onTap: isFuture ? null : () => onSelect?.call(key),
         child: Container(
@@ -143,13 +144,15 @@ class CalendarHeatmap extends StatelessWidget {
           decoration: BoxDecoration(
             color: isFuture
                 ? Colors.transparent
-                : HeatLevel.colorOf(dur),
+                : known
+                ? HeatLevel.colorOf(dur)
+                : const Color(0xFF454550),
             borderRadius: BorderRadius.circular(3),
             border: isSelected
                 ? Border.all(color: kBrand, width: 1.8)
                 : isToday
-                    ? Border.all(color: Colors.white38, width: 1)
-                    : null,
+                ? Border.all(color: Colors.white38, width: 1)
+                : null,
           ),
         ),
       ),
@@ -178,8 +181,10 @@ class _Legend extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Text('少',
-            style: TextStyle(fontSize: 10, color: Color(0xFF757575))),
+        const Text(
+          '少',
+          style: TextStyle(fontSize: 10, color: Color(0xFF757575)),
+        ),
         const SizedBox(width: 6),
         for (final c in HeatLevel.colors)
           Container(
@@ -192,8 +197,10 @@ class _Legend extends StatelessWidget {
             ),
           ),
         const SizedBox(width: 3),
-        const Text('多',
-            style: TextStyle(fontSize: 10, color: Color(0xFF757575))),
+        const Text(
+          '多',
+          style: TextStyle(fontSize: 10, color: Color(0xFF757575)),
+        ),
         const Spacer(),
         // 显示有记录的天数，这是热力图最直接的总结论。
         Text(
@@ -240,17 +247,23 @@ class SelectedDayCard extends StatelessWidget {
             children: [
               const Icon(Icons.event, size: 15, color: kBrand),
               const SizedBox(width: 8),
-              Text(date,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                date,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const Spacer(),
-              Text(HeatLevel.label(total),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: kBrand,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  )),
+              Text(
+                HeatLevel.label(total),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: kBrand,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               if (onClose != null)
                 IconButton(
                   iconSize: 16,
@@ -264,8 +277,10 @@ class SelectedDayCard extends StatelessWidget {
           ),
           if (entries.isEmpty) ...[
             const SizedBox(height: 8),
-            const Text('当天没有学习记录',
-                style: TextStyle(fontSize: 12, color: Color(0xFF757575))),
+            const Text(
+              '当天没有学习记录',
+              style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
+            ),
           ] else ...[
             const SizedBox(height: 10),
             for (final e in entries.take(8))
@@ -274,25 +289,34 @@ class SelectedDayCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(e.key,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12)),
+                      child: Text(
+                        e.key,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
-                    Text(_hm(e.value),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        )),
+                    Text(
+                      _hm(e.value),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ],
                 ),
               ),
             if (entries.length > 8)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('…另有 ${entries.length - 8} 个科目',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF757575))),
+                child: Text(
+                  '…另有 ${entries.length - 8} 个科目',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF757575),
+                  ),
+                ),
               ),
           ],
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../social_auth.dart';
 import '../main.dart' show kBrand;
@@ -48,33 +49,44 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                            color: kBrand.withValues(alpha: 0.4),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8))
+                          color: kBrand.withValues(alpha: 0.4),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
                       ],
                     ),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 48),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 48,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
                 const Center(
-                  child: Text('YPT',
-                      style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2)),
+                  child: Text(
+                    'YPT',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Center(
-                    child: Text('Yeolpumta Desktop',
-                        style: TextStyle(color: Colors.grey[500]))),
+                  child: Text(
+                    'Yeolpumta Desktop',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
+                ),
                 const SizedBox(height: 36),
                 TextField(
                   controller: _email,
                   decoration: const InputDecoration(
-                      labelText: 'Account (email)',
-                      prefixIcon: Icon(Icons.person_outline)),
+                    labelText: 'Account (email)',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -82,16 +94,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: true,
                   onSubmitted: (_) => _submit(st),
                   decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline)),
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 if (st.errorText != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(st.errorText!,
-                        style: const TextStyle(
-                            color: Colors.redAccent, fontSize: 13)),
+                    child: Text(
+                      st.errorText!,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 12),
                 FilledButton(
@@ -100,31 +117,42 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: kBrand,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: st.loading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('Sign in',
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Sign in',
                           style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 18),
                 // 구분선 "or"
-                Row(children: [
-                  Expanded(child: Divider(color: Colors.grey[800])),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('or',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey[800])),
-                ]),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey[800])),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        'or',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey[800])),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 // 소셜 로그인 (실제 앱과 동일한 공급자/엔드포인트)
                 _SocialButton(
@@ -147,11 +175,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
                 Center(
                   child: Text(
-                      kIsWeb
-                          ? 'Social login (Kakao/Naver) is available in the desktop app only'
-                          : 'Email or Kakao/Naver — your real YPT account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    kIsWeb
+                        ? 'Social login (Kakao/Naver) is available in the desktop app only'
+                        : 'Email or Kakao/Naver — your real YPT account',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
                 ),
               ],
             ),
@@ -190,15 +219,15 @@ class _SocialButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: enabled ? onTap : null,
       icon: Icon(icon, size: 18, color: fg),
-      label: Text(label,
-          style: TextStyle(
-              color: fg, fontSize: 15, fontWeight: FontWeight.w600)),
+      label: Text(
+        label,
+        style: TextStyle(color: fg, fontSize: 15, fontWeight: FontWeight.w600),
+      ),
       style: FilledButton.styleFrom(
         backgroundColor: bg,
         disabledBackgroundColor: bg.withValues(alpha: 0.4),
         padding: const EdgeInsets.symmetric(vertical: 14),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
